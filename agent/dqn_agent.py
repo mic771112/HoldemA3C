@@ -122,7 +122,6 @@ class dqnModel():
         to_call = observation.community_state.to_call
         return card_hot + [total_pot, my_stack, to_call]
 
-
     def __turn_card_to_one_hot_returnIndx(self, card, card_hot):
         if card == -1:
             return card_hot
@@ -156,10 +155,11 @@ class dqnModel():
         # print("Test State => ", self.__turn_observation_to_state(state, playerid))
         # input("pause")
         if state.community_state.to_call > 0:
-            if random.random() > 0.7 :
+            if random.random() > 0.7:
                 return ACTION(action_table.FOLD, 0)
             else:
-                return ACTION(action_table.CALL, state.community_state.to_call)
+                return ACTION(action_table.CALL,
+                              state.community_state.to_call)
         else:
             if random.random() > 0.7:
                 return ACTION(action_table.RAISE, 50)
