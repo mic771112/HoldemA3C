@@ -141,13 +141,14 @@ class ClientPlayer():
         self._cycle += 1
 
     def __roundNameToRound(self, rounName):
-        if "Deal":
+        # Shanger 20180721
+        if rounName == "Deal":
             return 0
-        elif "Flop":
+        elif rounName == "Flop":
             return 1
-        elif "Turn":
+        elif rounName == "Turn":
             return 2
-        elif "River":
+        elif rounName == "River":
             return 3
 
     def _new_round(self):
@@ -430,7 +431,13 @@ class ClientPlayer():
             cur_round = self.__roundNameToRound(data["table"]["roundName"])
             if self._debug:
                 print("[BEBUG] Seat {} do action [{}]".format(actioned_id, data["action"]["action"]))
-            player_info = self._player_dict[actioned_id]
+            try:
+                player_info = self._player_dict[actioned_id]
+            except KeyError:  # Shanger for join a processing game 20180721
+                i = self.__getPlayerSeatByName(actioned_id)
+                p = data["players"][i]
+                self._add_player(i, p["chips"], p["playerName"], p["reloadCount"])
+                player_info = self._player_dict[actioned_id]
             player_info.playedthisround = True
             player_info.stack = data["action"]["chips"]
 
@@ -443,7 +450,8 @@ class ClientPlayer():
                 if self._debug:
                     print('[DEBUG] Player', self._current_player, data["action"]["action"], data["action"]["amount"])
             elif data["action"]["action"] == "check":
-                self._player_bet(player_info, data["action"]["amount"])
+                # self._player_bet(player_info, data["action"]["amount"])  # Shanger : error with Keyerror : amount
+                self._player_bet(player_info, 0)
                 if self._debug:
                     print('[DEBUG] Player', self._current_player, "check", data["action"]["amount"])
             elif data["action"]["action"] == "call":

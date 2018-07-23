@@ -48,8 +48,8 @@ def array_average_inferring(card_array, up_to=7):
 
 def pooling(array, kernel, ptype='avg'):
     assert ptype in {'avg', 'max', 'sum'}
-    print(array.shape)
-    print(array)
+    # print(array.shape)
+    # print(array)
     rows, cols = array.shape
     krows, kcols = kernel
     pooled_rows, pooled_cols = rows - krows + 1, cols - kcols + 1
@@ -74,7 +74,7 @@ def array2features(array):
     flush = pooling(pooling(array, kernel=(13, 1)), kernel=(2, 1), ptype='max')   # 1 x 4
     straight_flush = pooling(pooling(array, kernel=(5, 1)), kernel=(1, 4), ptype='max')  # 10 x 1
     high = pooling(array, kernel=(1, 4), ptype='max')  # 14 x 1
-    straight = pooling(pooling(array, kernel=(1, 4), ptype='sum'), kernel=(5, 1))  # 10 x 1
+    straight = pooling(pooling(array, kernel=(1, 4), ptype='max'), kernel=(5, 1))  # 10 x 1
     features = np.concatenate(tuple(map(lambda x: x.reshape(-1), (two_three_four,
                                                                   flush,
                                                                   straight_flush,

@@ -23,8 +23,8 @@ class allCallModel():
 
     def takeAction(self, state, playerid):
         ''' (Predict/ Policy) Select Action under state'''
-        print('playerid', playerid)
-        print('state', state[0])
+        # print('playerid', playerid)
+        # print('state', state[0])
         if state.community_state.to_call == 0:
             return ACTION(action_table.CHECK, 0)
         else:
