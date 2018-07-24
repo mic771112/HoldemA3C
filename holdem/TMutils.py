@@ -226,6 +226,7 @@ class ClientPlayer():
         elif msg == "__game_prepare":
             return False
         elif msg == "__new_round":
+
             # No avtion, update state
             self._tocall = 0
             self._lastraise = 0
@@ -287,7 +288,8 @@ class ClientPlayer():
                     p_card = [-1, -1]
                     pass
                 player_info.hand = p_card
-
+            my_seat = self.__getPlayerSeatByName(self._name)
+            self._model.new_round(self.get_current_state(), my_seat)
             return False
 
         elif msg == "__start_reload": # Might Action
@@ -530,11 +532,15 @@ class ClientPlayer():
                 print("[LIVE] Cycle End")
                 self.render(mode='machine')
             self._reset()
+            my_seat = self.__getPlayerSeatByName(self._name)
+            self._model.round_end(self.get_current_state(), my_seat)
             return False # not interesting
 
         elif msg == "__game_over":
             if self._debug:
                 print("[DEBUG] {} {} ". format(msg, data))
+            my_seat = self.__getPlayerSeatByName(self._name)
+            self._model.game_over(self.get_current_state(), my_seat)
             return True # not interesting
 
         else:
