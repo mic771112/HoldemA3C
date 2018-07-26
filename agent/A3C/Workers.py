@@ -34,7 +34,7 @@ class Worker:
         while not self.mother.coord.should_stop() and self.mother.global_ep < max_global_ep:  # single move in this loop is a game == a episode
             time.sleep(np.random.randint(5, 20))
             local_game_count += 1
-            name = 'omggyy' + str((int(str(self.name)[-1])+self.mother.web_shift) % 16)
+            name = 'omg' + str((int(str(self.name)[-1])+self.mother.web_shift) % 16)
             try:
                 client_player = holdem.ClientPlayer(uri, name, self.AC, debug=False, playing_live=False)
                 client_player.doListen()
