@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 class A3CAgent:
 
-    def __init__(self, model_dir, learning=True):
+    def __init__(self, model_dir, learning=True, hiring=True):
 
         self.sess = None
         self.saver = None
@@ -34,8 +34,8 @@ class A3CAgent:
         self.output_graph = True
 
         self.model_dir = model_dir
-        self.log_dir = '{}/log'.format(self.model_dir)
-        self.ckpt_path = '{}/ckpt'.format(self.model_dir)
+        self.log_dir = '{}/log/'.format(self.model_dir)
+        self.ckpt_path = '{}/ckpt/'.format(self.model_dir)
         pathlib.Path(self.log_dir).mkdir(parents=True, exist_ok=True)
         pathlib.Path(self.model_dir).mkdir(parents=True, exist_ok=True)
 
@@ -45,17 +45,18 @@ class A3CAgent:
         self.update_global_iter = 100000
         self.dump_global_iter = 3571
         self.final_dumped = False
-        self.n_workers = 1  # multiprocessing.cpu_count()
+        self.n_workers = 8  # multiprocessing.cpu_count()
         self.global_net = ACNet(mother=self,
                                 scope=self.global_scope,
                                 sess=self.sess,
                                 globalmodel=None,
                                 a_opt=None,
                                 c_opt=None)
+
+
         self.load_sess()
         self.global_net.sess = self.sess
 
-        self.global_step = tf.Variable(0, trainable=False)
         self.opt_a = tf.train.AdamOptimizer(self.lr_a, name='RMSPA')
         self.opt_c = tf.train.AdamOptimizer(self.lr_c, name='RMSPC')
 
@@ -64,7 +65,11 @@ class A3CAgent:
 
         self.global_running_r = list()
         self.global_ep = 0
-        self.hiring()
+
+        self.web_shift = 0
+
+        if hiring:
+            self.hiring()
 
     def dump_tensorboard(self):
         if self.output_graph:
@@ -77,10 +82,12 @@ class A3CAgent:
         self.saver = tf.train.Saver(name='saver', max_to_keep=15)
 
         try:
-            self.saver.restore(self.sess, self.ckpt_path)
+            ckpt = tf.train.get_checkpoint_state(self.ckpt_path)
+            # if ckpt and ckpt.model_checkpoint_path:
+            self.saver.restore(self.sess, ckpt.model_checkpoint_path)
             logging.error('ckpt read')
 
-        except (tf.errors.NotFoundError, ValueError):
+        except (tf.errors.NotFoundError, ValueError, AttributeError):
             config = tf.ConfigProto()
             config.gpu_options.allow_growth = True
             self.sess = tf.Session(config=config)
@@ -88,6 +95,7 @@ class A3CAgent:
             logging.error('no ckpt read')
 
     def dump_sess(self, global_step=None, extra_path=''):
+        self.sess.run(tf.assign_add(global_step, 1))
         path = self.ckpt_path + extra_path
 
         try:
@@ -140,7 +148,7 @@ class A3CAgent:
                                        update_global_iter=update_global_iter,
                                        gamma=gamma,
                                        dump_global_iter=dump_global_iter,
-                                       oppositenum=9)
+                                       oppositenum=oppositenum)
                     except ValueError as e:
                         while True:
                             print(e)
@@ -150,7 +158,7 @@ class A3CAgent:
                                            update_global_iter=update_global_iter,
                                            gamma=gamma,
                                            dump_global_iter=dump_global_iter,
-                                           oppositenum=9)
+                                           oppositenum=oppositenum)
             else:
                 def job():
                     try:
@@ -158,7 +166,8 @@ class A3CAgent:
                                     max_global_ep=max_global_ep,
                                     update_global_iter=update_global_iter,
                                     gamma=gamma,
-                                    dump_global_iter=dump_global_iter)
+                                    dump_global_iter=dump_global_iter,
+                                    oppositenum=oppositenum)
                     except ValueError as e:
                         while True:
                             print(e)
@@ -167,15 +176,13 @@ class A3CAgent:
                                         max_global_ep=max_global_ep,
                                         update_global_iter=update_global_iter,
                                         gamma=gamma,
-                                        dump_global_iter=dump_global_iter)
+                                        dump_global_iter=dump_global_iter,
+                                        oppositenum=oppositenum)
 
             t = threading.Thread(target=job)
             t.start()
             worker_threads.append(t)
         self.coord.join(worker_threads)
-
-        print('final dump')
-        self.dump_sess(global_step=self.global_step)
 
     def getReload(self, state):
         return self.global_net.getReload(state)
@@ -192,81 +199,77 @@ class A3CAgent:
     def game_over(self, state, playerid):
         return self.global_net.game_over(state, playerid)
 
-    # def webtrain(self, max_global_ep=100, update_global_iter=137, gamma=0.99, dump_global_iter=3571):
-    #
-    #     self.update_global_iter = update_global_iter
-    #     self.dump_global_iter = dump_global_iter
-    #
-    #     self.dump_tensorboard()
-    #     worker_threads = list()
-    #     for worker in self.workers:
-    #
-    #         def job():
-    #             try:
-    #                 worker.work(max_global_ep=max_global_ep,
-    #                             update_global_iter=update_global_iter,
-    #                             gamma=gamma,
-    #                             dump_global_iter=dump_global_iter)
-    #             except ValueError as e:
-    #                 while True:
-    #                     print(e)
-    #                     self.sess.run(worker.AC.pull_global())
-    #                     worker.work(max_global_ep=max_global_ep,
-    #                                 update_global_iter=update_global_iter,
-    #                                 gamma=gamma,
-    #                                 dump_global_iter=dump_global_iter)
-    #             # worker.work(opposite_agents=opposite_agents.copy(),
-    #             #             mother=self,
-    #             #             max_global_ep=max_global_ep,
-    #             #             update_global_iter=update_global_iter,
-    #             #             gamma=gamma)
-    #         # t = multiprocessing.Process(target=job)
-    #         t = threading.Thread(target=job)
-    #         t.start()
-    #         worker_threads.append(t)
-    #     self.coord.join(worker_threads)
-
-
-
-
+    def single_train(self, opposite_agents, max_global_ep=100, dump_global_iter=3000, update_global_iter=1, web=False,
+                    oppositenum=5):
+        self.train(opposite_agents,
+                   max_global_ep=max_global_ep,
+                   dump_global_iter=dump_global_iter,
+                   update_global_iter=update_global_iter,
+                   web=web,
+                   oppositenum=oppositenum)  # 3571
+        self.dump_sess(global_step=agent.global_net.global_step)
+        self.global_ep = 0
 
 if __name__ == '__main__':
     from agent import allinModel
     from agent import allFoldModel
     from agent import allRaiseModel
     from agent import allCallModel
+    from agent import randomAgent
     import sys
-    agent = A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model122', learning=True)
-    # agent = A3CAgent(model_dir='./model')
 
+    agent = A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model126', learning=True, hiring=True)
+    # agent2 = A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model125', learning=True, hiring=True)
+    # agent = A3CAgent(model_dir='./model')
+    # get_agent = lambda: A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model125', learning=False, hiring=False)
     sys.path.append('../../')
     from agent.MonteCarlo.agent import NpRandom
-    o_list = [allCallModel()] * 10 \
-             + [allFoldModel()] * 1 \
-             + [allRaiseModel()] * 1 \
-             + [allinModel()] * 1
+    simple_o_list = [allCallModel()] * 10 \
+                    + [allFoldModel()] * 1 \
+                    + [allRaiseModel()] * 1 \
+                    + [allinModel()] * 1
 
-    # o_list = [NpRandom(None, 'omggyy', timeout=0.25, cores=1),
-    #           NpRandom(None, 'omggyy2', timeout=0.25, cores=1),
-    #           NpRandom(None, 'omggyy3', timeout=0.25, cores=1),
-    #           NpRandom(None, 'omggyy4', timeout=0.5, cores=1),
-    #           allCallModel(),
-    #           allinModel()]
+    o_list = [NpRandom(None, 'omggyy', timeout=0.25, cores=1),
+              NpRandom(None, 'omggyy2', timeout=0.25, cores=1),
+              NpRandom(None, 'omggyy3', timeout=0.25, cores=1),
+              NpRandom(None, 'omggyy4', timeout=0.25, cores=1),
+              NpRandom(None, 'omggyy5', timeout=0.25, cores=1),
+              NpRandom(None, 'omggyy6', timeout=0.5, cores=1),
+              NpRandom(None, 'omggyy7', timeout=0.5, cores=1),
+              NpRandom(None, 'omggyy8', timeout=0.5, cores=1),
+              NpRandom(None, 'omggyy9', timeout=1, cores=1),
+              NpRandom(None, 'omggyyT', timeout=1, cores=1)]
 
+    # o_list = [get_agent(), get_agent(), get_agent(), get_agent(), get_agent(), get_agent(), ]
+    # o_list = [allCallModel(), allCallModel(), allCallModel(), allCallModel(), allCallModel(), allCallModel(), ]
     # o_list = [A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/modoel14', learning=True),
     #           A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/modoel14', learning=True)]
 
-    agent.train(opposite_agents=o_list, max_global_ep=10000, dump_global_iter=1000, update_global_iter=1, web=False)  # 3571
-    agent.train(opposite_agents=o_list, max_global_ep=10000, dump_global_iter=1000, update_global_iter=3, web=False)
-    agent.train(opposite_agents=o_list, max_global_ep=10000, dump_global_iter=1000, update_global_iter=7, web=False)
-    agent.train(opposite_agents=o_list, max_global_ep=10000, dump_global_iter=1000, update_global_iter=9, web=False)
-    agent.train(opposite_agents=o_list, max_global_ep=1000, dump_global_iter=100, update_global_iter=1, web=True)
-    agent.train(opposite_agents=o_list, max_global_ep=100, dump_global_iter=3000, update_global_iter=3, web=False)
-    agent.train(opposite_agents=o_list, max_global_ep=10000, dump_global_iter=3000, update_global_iter=3, web=True)
-    agent.train(opposite_agents=o_list, max_global_ep=100, dump_global_iter=3000, update_global_iter=7, web=False)
-    agent.train(opposite_agents=o_list, max_global_ep=10000, dump_global_iter=3000, update_global_iter=7, web=True)
-    agent.train(opposite_agents=o_list, max_global_ep=100, dump_global_iter=3000, update_global_iter=11, web=False)
-    agent.train(opposite_agents=o_list, max_global_ep=10000, dump_global_iter=3000, update_global_iter=11, web=True)
 
+    # agent.single_train(opposite_agents=simple_o_list,
+    #                    max_global_ep=10000,
+    #                    dump_global_iter=1000,
+    #                    update_global_iter=5,
+    #                    web=False,
+    #                    oppositenum=5)
 
+    # agent.single_train(opposite_agents=o_list,
+    #                    max_global_ep=500,
+    #                    dump_global_iter=100,
+    #                    update_global_iter=1,
+    #                    web=False,
+    #                    oppositenum=9)
 
+    # agent.single_train(opposite_agents=o_list,
+    #                    max_global_ep=1000,
+    #                    dump_global_iter=100,
+    #                    update_global_iter=3,
+    #                    web=False,
+    #                    oppositenum=9)
+
+    agent.single_train(opposite_agents=o_list,
+                       max_global_ep=10000,
+                       dump_global_iter=100,
+                       update_global_iter=5,
+                       web=True,
+                       oppositenum=9)

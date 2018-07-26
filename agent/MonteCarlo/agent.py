@@ -120,7 +120,13 @@ class NpRandom:
         return data
     def takeAction(self, state, playerid):
         data = self.state2data(state, playerid)
-        action, amount, actionlog = self.brain.infer(data=data, pot=state.player_states[playerid].stack, timeout=self.timeout)
+        # action, amount, actionlog = self.brain.infer(data=data, pot=state.player_states[playerid].stack,
+        #                                              timeout=self.timeout)
+        try:
+            action, amount, actionlog = self.brain.infer(data=data, pot=state.player_states[playerid].stack, timeout=self.timeout)
+        except (ValueError, KeyError) as e:
+            print('=====>', e)
+            return ACTION(action_table.FOLD, 0)  ## exception for tablle lookup errror
 
         if action == 'fold':
             return ACTION(action_table.FOLD, int(amount))

@@ -47,7 +47,7 @@ class ACNet:
     def build_agent(self, scope, a_opt, c_opt):
 
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
-
+            self.global_step = tf.Variable(0, trainable=False)
             self.s = tf.placeholder(tf.float32, [None, self.state_size], 'S')
             self.dis_a_his = tf.placeholder(tf.int32, [None, 1], 'Ad')
             self.con_a_his = tf.placeholder(tf.float32, [None, self.con_action_space], 'Ac')
@@ -104,7 +104,7 @@ class ACNet:
                                                  zip(self.c_params, self.globalmodel.c_params)]
 
                     with tf.name_scope('push'):
-                        self.update_a_op = a_opt.apply_gradients(zip(self.a_grads, self.globalmodel.a_params), global_step=self.mother.global_step)
+                        self.update_a_op = a_opt.apply_gradients(zip(self.a_grads, self.globalmodel.a_params))
                         self.update_c_op = c_opt.apply_gradients(zip(self.c_grads, self.globalmodel.c_params))
 
     def update_global(self, feed_dict):  # run by a local
@@ -120,22 +120,25 @@ class ACNet:
         amount = float(amount[0])
         return action, amount
 
-    def _build_net(self, scope, layer_nodes=128, convergence_node=4):
+    def self_attention(self):
+        pass ## TODO
+
+    def _build_net(self, scope, layer_nodes=256, convergence_node=4):
         # w_init = tf.random_normal_initializer(0, 0.1)
         w_init = tf.glorot_uniform_initializer()
-        drop_prob = 0.3
+        drop_prob = 0.2
         with tf.variable_scope('actor'):
             l_a = tf.layers.dense(self.s, layer_nodes, tf.nn.relu6, kernel_initializer=w_init, name='la')
             # l_a = tf.layers.dropout(l_a, rate=drop_prob)
-            # l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-            # l_a = tf.layers.dropout(l_a, rate=drop_prob)
+            l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+            l_a = tf.layers.dropout(l_a, rate=drop_prob)
             # l_a_ = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_a
             # l_a = tf.layers.dropout(l_a_, rate=drop_prob)
-            # l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+            l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
             # l_a = tf.layers.dropout(l_a, rate=drop_prob)
             # l_a_ = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_a_
             # l_a = tf.layers.dropout(l_a_, rate=drop_prob)
-            # l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+            l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
             # l_a = tf.layers.dropout(l_a, rate=drop_prob)
             # l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_a_
 
@@ -151,20 +154,20 @@ class ACNet:
         with tf.variable_scope('critic'):
             l_c = tf.layers.dense(self.s, layer_nodes, tf.nn.relu6, kernel_initializer=w_init, name='lc')
             # l_c = tf.layers.dropout(l_c, rate=drop_prob)
-            # l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-            # l_c = tf.layers.dropout(l_c, rate=drop_prob)
+            l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+            l_c = tf.layers.dropout(l_c, rate=drop_prob)
             # l_c_ = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_c
             # l_c = tf.layers.dropout(l_c_, rate=drop_prob)
-            # l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+            l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
             # l_c = tf.layers.dropout(l_c, rate=drop_prob)
             # l_c_ = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_c_
             # l_c = tf.layers.dropout(l_c_, rate=drop_prob)
-            # l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+            l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
             # l_c = tf.layers.dropout(l_c, rate=drop_prob)
             # l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_c_
 
             # l_c = tf.layers.dense(l_c, convergence_node, tf.nn.relu, kernel_initializer=w_init)
-            v = tf.layers.dense(l_c, 1, kernel_initializer=w_init, name='v')  # state value
+            v = tf.layers.dense(l_c, 1, tf.nn.relu, kernel_initializer=w_init, name='v')  # state value
 
         a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope + '/actor')
         c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope + '/critic')
@@ -252,12 +255,12 @@ class ACNet:
 
         if not global_ep % self.mother.dump_global_iter:
             if self.training:
-                self.mother.dump_sess(global_step=self.mother.global_step) #
+                self.mother.dump_sess(global_step=self.globalmodel.global_step)
                 print('ckpt dumped')
 
 
         self.mother.global_running_r.append(self.ep_r)
-        self.mother.global_running_r = self.mother.global_running_r[-100:]
+        self.mother.global_running_r = self.mother.global_running_r[-1000:]
         print('{}\tEp:{}| GameRound:{} | Ep_r:{}| Ep_r_avg:{}'.format(
             self.name,
             global_ep,
@@ -281,7 +284,7 @@ class ACNet:
         hands = [i for i in state.player_states[playerid].hand if i != -1]
         publics = [i for i in state.community_card if i != -1]
         action2action = {i: a for i, a in enumerate(['bet', 'call', 'check', 'fold'])}
-        # print(action2action[action], amount_, card.deuces2cards(hands), card.deuces2cards(publics))
+        print(action2action[action], amount_, card.deuces2cards(hands), card.deuces2cards(publics))
 
         # self.state_cache, self.action_cache, self.amount_cache = feature, action, amount
         self.update_buffer(0, feature, action, amount)  # temp reward

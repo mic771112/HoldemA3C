@@ -6,6 +6,7 @@ import time
 from random import shuffle
 from ACNet import ACNet, PLAYER_CACHES_INIT
 import json
+import card
 
 class Worker:
     def __init__(self, mother, name, sess, globalmodel, a_opt, c_opt, learning=True):
@@ -24,7 +25,6 @@ class Worker:
     def webwork(self, opposite_agents, max_global_ep, update_global_iter, gamma, dump_global_iter, uri='ws://poker-training.vtr.trendnet.org:3001/', oppositenum=9):
         self.mother.final_dumped = False
         time.sleep(np.random.randint(100))
-
         local_game_count = 0
         local_round_count = 0
         # self.env_init(opposite_agents)
@@ -32,19 +32,32 @@ class Worker:
         # self.learnable_agent = self._get_learnable_agent(self.model_list)
 
         while not self.mother.coord.should_stop() and self.mother.global_ep < max_global_ep:  # single move in this loop is a game == a episode
-
+            time.sleep(np.random.randint(5, 20))
             local_game_count += 1
-            name = 'omg' + str(int(str(self.name)[-1])+0)
+            name = 'omg' + str((int(str(self.name)[-1])+self.mother.web_shift) % 16)
             try:
                 client_player = holdem.ClientPlayer(uri, name, self.AC, debug=False, playing_live=False)
                 client_player.doListen()
-            except json.decoder.JSONDecodeError:
-                pass
-        # final dump
-        print('final dump')
-        if not self.mother.final_dumped:
-            self.mother.final_dumped = True
-            self.mother.dump_sess(global_step=self.mother.global_step)
+            except:
+                self.mother.web_shift += self.mother.n_workers
+
+    @staticmethod
+    def check_repeat_round_card(state):
+        round_card = [i for i in state.community_card if i > 0]
+        for p in state.player_states:
+            round_card.extend([i for i in p.hand if i > 0])
+
+        if len(round_card) == len(set(round_card)):
+            return False
+        else:
+            print(sorted(round_card))
+            for p in state.player_states:
+                print(card.deuces2cards([i for i in p.hand if i > 0]))
+            print(card.deuces2cards([i for i in state.community_card if i > 0]))
+
+            return True
+
+
 
 
     def work(self, opposite_agents, max_global_ep, update_global_iter, gamma, dump_global_iter, uri=None, oppositenum=9):
@@ -65,7 +78,7 @@ class Worker:
 
             if geterror:
                 for seat, agnet in self._get_learnable_agent(self.model_list).items():
-                    agnet.init_cache()
+                    # agnet.init_cache()
                     agnet.init_learning_buffer()
                     agnet.init_r()
 
@@ -89,15 +102,23 @@ class Worker:
                 assert not cycle_terminal
                 while not cycle_terminal:  # single move in this loop is a action
 
+                    geterror = self.check_repeat_round_card(state)
+                    if geterror:
+                        print('====> repeat_round_card!')
+                        break
+
+
                     # if self.name == 'W_0':
                     #     self.env.render()
                     current_player = state.community_state.current_player
                     actions = holdem.model_list_action(state, n_seats=self.env.n_seats, model_list=self.model_list)
 
                     # state, rews, cycle_terminal, info = self.env.step(actions)
+
                     try:
                         state, rews, cycle_terminal, info = self.env.step(actions)
-                    except (ValueError, gym.error.Error, KeyError):
+                    except (ValueError, gym.error.Error, KeyError) as e:
+                        print('=====>', e)
                         geterror = True
                         break
 
@@ -187,7 +208,7 @@ class Worker:
         self.seats = oppositenum + 1
         self.myseat = np.random.randint(self.seats)
         self.model_list.insert(self.myseat, self.AC)
-        self.env = holdem.TexasHoldemEnv(self.seats)
+        self.env = gym.make('TexasHoldem-v2')  # holdem.TexasHoldemEnv(self.seats)
 
         # gym.make('TexasHoldem-v2') # holdem.TexasHoldemEnv(self.seats)  #  holdem.TexasHoldemEnv(2)
         for i in range(self.seats):
