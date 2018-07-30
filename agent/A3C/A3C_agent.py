@@ -253,34 +253,35 @@ if __name__ == '__main__':
     #                    update_global_iter=5,
     #                    web=False,
     #                    oppositenum=5)
-
-    agent.single_train(opposite_agents=o_list,
-                       max_global_ep=500,
-                       dump_global_iter=100,
-                       update_global_iter=1,
-                       web=False,
-                       oppositenum=5)
-
-    agent.single_train(opposite_agents=o_list,
-                       max_global_ep=1000,
-                       dump_global_iter=100,
-                       update_global_iter=3,
-                       web=False,
-                       oppositenum=5)
-
+    #
+    # agent.single_train(opposite_agents=o_list,
+    #                    max_global_ep=500,
+    #                    dump_global_iter=100,
+    #                    update_global_iter=1,
+    #                    web=False,
+    #                    oppositenum=5)
+    #
+    # agent.single_train(opposite_agents=o_list,
+    #                    max_global_ep=1000,
+    #                    dump_global_iter=100,
+    #                    update_global_iter=3,
+    #                    web=False,
+    #                    oppositenum=5)
+    #
     agent.single_train(opposite_agents=o_list,
                        max_global_ep=10000,
-                       dump_global_iter=1000,
+                       dump_global_iter=300,
                        update_global_iter=5,
                        web=False,
                        oppositenum=5)
 
     agent.single_train(opposite_agents=o_list,
                        max_global_ep=10000,
-                       dump_global_iter=1000,
+                       dump_global_iter=300,
                        update_global_iter=5,
                        web=False,
                        oppositenum=5)
+
     agent.single_train(opposite_agents=o_list,
                        max_global_ep=10000,
                        dump_global_iter=1000,
