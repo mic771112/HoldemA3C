@@ -56,6 +56,7 @@ class Player(object):
         self.sitting_out = True
         self._roundRaiseLimit = roundRaiseLimit
         self._roundRaiseCount = 0
+        self.total_betting = 0
 
     def get_name(self):
         return self.playername

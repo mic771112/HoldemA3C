@@ -16,7 +16,7 @@ class ACNet:
         self.mother = mother
         self.sess = sess
         self.name = scope
-        self.state_size = 259
+        # self.state_size = 259
         self.dis_action_space = 3
         self.con_action_space = 1
         self.con_action_bound = [0, 30]
@@ -47,8 +47,16 @@ class ACNet:
     def build_agent(self, scope, a_opt, c_opt):
 
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
+            # c_array, o_array, pt_vector = s  ## (14, 4, 3), (16 x n_opposite), (11)
+
             self.global_step = tf.Variable(0, trainable=False)
-            self.s = tf.placeholder(tf.float32, [None, self.state_size], 'S')
+
+
+            # self.s = tf.placeholder(tf.float32, [None, self.state_size], 'S')
+            self.c_array = tf.placeholder(tf.float32, [None, 14, 4, 3], 'c_array')
+            self.o_array = tf.placeholder(tf.float32, [None, None, 16], 'o_array')
+            self.pt_vector = tf.placeholder(tf.float32, [None, 11], 'pt_vector')
+
             self.dis_a_his = tf.placeholder(tf.int32, [None, 1], 'Ad')
             self.con_a_his = tf.placeholder(tf.float32, [None, self.con_action_space], 'Ac')
             self.v_target = tf.placeholder(tf.float32, [None, 1], 'Vtarget')
@@ -114,59 +122,70 @@ class ACNet:
         self.sess.run([self.pull_a_params_op, self.pull_c_params_op])
 
     def choose_action(self, s):  # run by a local
-        s = s[np.newaxis, :]  # np.newaxis: extra dim
-        prob_weights, amount = self.sess.run([self.a_prob, self.amount], {self.s: s})
+        # c_array, o_array, pt_vector = s  ## (14, 4, 3), (n_opposite x 16), (11)
+        state_vector, state_array, state_round = s
+
+        state_vector = state_vector[np.newaxis, :]
+        state_array = state_array[np.newaxis, :]
+        state_round = np.array([state_round])
+
+        prob_weights, amount = self.sess.run([self.a_prob, self.amount], {self.state_vector: state_vector,
+                                                                          self.state_array: state_array,
+                                                                          self.state_round: state_round})
         action = np.random.choice(range(prob_weights.shape[1]), p=prob_weights.ravel())
         amount = float(amount[0])
         return action, amount
 
-    def self_attention(self):
-        pass ## TODO
 
-    def _build_net(self, scope, layer_nodes=256, convergence_node=4):
+    def _build_net(self, scope, layer_nodes=256, convergence_node=16):
         # w_init = tf.random_normal_initializer(0, 0.1)
         w_init = tf.glorot_uniform_initializer()
         drop_prob = 0.2
+
+        self.state_vector = tf.placeholder(tf.float32, [None, 167], 's_vector')
+        self.state_array = tf.placeholder(tf.float32, [None, None, 16], 's_array')
+        self.state_round = tf.placeholder(tf.int32, [None], 'round')
+
+        round_embeddings_for_concat = tf.get_variable('round_embeddings_for_concat', [6, 16])
+        embedded_round_for_concat = tf.gather(round_embeddings_for_concat, self.state_round)
+
+        round_embeddings = tf.get_variable('word_embeddings', [6, layer_nodes])
+        embedded_round = tf.gather(round_embeddings, self.state_round)
+
+        cell_fw = tf.contrib.rnn.MultiRNNCell([tf.nn.rnn_cell.LSTMCell(i) for i in [32, 32]])
+        cell_bw = tf.contrib.rnn.MultiRNNCell([tf.nn.rnn_cell.LSTMCell(i) for i in [32, 32]])
+        outputs, states = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, self.state_array, dtype=tf.float32)
+        fw_vector = outputs[0][:, -1, :]
+        bw__vector = outputs[1][:, -1, :]
+        o_vector = tf.concat([fw_vector, bw__vector, self.state_vector, embedded_round_for_concat], -1)
+
+        main_layer = tf.layers.dense(o_vector, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+        main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + embedded_round
+        main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + embedded_round
+        main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+        main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+
+
+
         with tf.variable_scope('actor'):
-            l_a = tf.layers.dense(self.s, layer_nodes, tf.nn.relu6, kernel_initializer=w_init, name='la')
-            # l_a = tf.layers.dropout(l_a, rate=drop_prob)
+            l_a = tf.layers.dropout(main_layer, rate=drop_prob)
             l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-            l_a = tf.layers.dropout(l_a, rate=drop_prob)
-            # l_a_ = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_a
-            # l_a = tf.layers.dropout(l_a_, rate=drop_prob)
-            l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-            # l_a = tf.layers.dropout(l_a, rate=drop_prob)
-            # l_a_ = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_a_
-            # l_a = tf.layers.dropout(l_a_, rate=drop_prob)
-            l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-            # l_a = tf.layers.dropout(l_a, rate=drop_prob)
-            # l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_a_
-
-
-            # l_a_actions = tf.layers.dense(l_a, self.dis_action_space*convergence_node, tf.nn.relu, kernel_initializer=w_init)
-            # l_a_mu = tf.layers.dense(l_a, self.con_action_space*convergence_node, tf.nn.relu, kernel_initializer=w_init)
-            # l_a_sigma = tf.layers.dense(l_a, self.con_action_space*convergence_node, tf.nn.relu, kernel_initializer=w_init)
-
-            actions = tf.layers.dense(l_a, self.dis_action_space, tf.nn.softmax, kernel_initializer=w_init, name='actions')  # raise, call, check, fold
-            mu = tf.layers.dense(l_a, self.con_action_space, tf.nn.relu, kernel_initializer=w_init, name='mu')
-            sigma = tf.layers.dense(l_a, self.con_action_space, tf.nn.relu, kernel_initializer=w_init, name='sigma')
+            l_a_actions = tf.layers.dense(l_a, self.dis_action_space*convergence_node, tf.nn.relu, kernel_initializer=w_init)
+            l_a_mu = tf.layers.dense(l_a, self.con_action_space*convergence_node, tf.nn.relu, kernel_initializer=w_init)
+            l_a_sigma = tf.layers.dense(l_a, self.con_action_space*convergence_node, tf.nn.relu, kernel_initializer=w_init)
+            actions = tf.layers.dense(l_a_actions, self.dis_action_space, tf.nn.softmax, kernel_initializer=w_init, name='actions')  # raise, call, check, fold
+            mu = tf.layers.dense(l_a_mu, self.con_action_space, tf.nn.relu, kernel_initializer=w_init, name='mu')
+            sigma = tf.layers.dense(l_a_sigma, self.con_action_space, tf.nn.relu, kernel_initializer=w_init, name='sigma')
 
         with tf.variable_scope('critic'):
-            l_c = tf.layers.dense(self.s, layer_nodes, tf.nn.relu6, kernel_initializer=w_init, name='lc')
-            # l_c = tf.layers.dropout(l_c, rate=drop_prob)
+            l_c = tf.layers.dropout(main_layer, rate=drop_prob)
             l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-            l_c = tf.layers.dropout(l_c, rate=drop_prob)
-            # l_c_ = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_c
-            # l_c = tf.layers.dropout(l_c_, rate=drop_prob)
-            l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-            # l_c = tf.layers.dropout(l_c, rate=drop_prob)
-            # l_c_ = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_c_
-            # l_c = tf.layers.dropout(l_c_, rate=drop_prob)
-            l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-            # l_c = tf.layers.dropout(l_c, rate=drop_prob)
-            # l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + l_c_
-
-            # l_c = tf.layers.dense(l_c, convergence_node, tf.nn.relu, kernel_initializer=w_init)
+            l_c = tf.layers.dense(main_layer, convergence_node, tf.nn.relu, kernel_initializer=w_init)
+            l_c = tf.layers.dense(l_c, convergence_node, tf.nn.relu, kernel_initializer=w_init)
             v = tf.layers.dense(l_c, 1, tf.nn.relu, kernel_initializer=w_init, name='v')  # state value
 
         a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope + '/actor')
@@ -218,12 +237,22 @@ class ACNet:
         # print(self.name, 'self.buffer_action', self.buffer_action)
         # print(self.name, 'self.buffer_amount', self.buffer_amount)
         # print(self.name, self.buffer_s)
-        buffer_s = np.vstack(self.buffer_s)
+
+
+        state_vector, state_array, state_round = zip(*self.buffer_s)
+        state_vector = np.array(state_vector)
+        max_opposite = max([i.shape[0] for i in state_array])
+        state_array = np.array([np.vstack([i, [[0] * 16] * (max_opposite - i.shape[0])])
+                                if (max_opposite - i.shape[0]) else i for i in state_array])
+        state_round = np.array(state_round)
+
         buffer_action = np.vstack(self.buffer_action)
         buffer_amount = np.vstack(self.buffer_amount)
         buffer_v = np.vstack(self.buffer_v)
         feed_dict = {
-            self.s: buffer_s,
+            self.state_vector: state_vector,
+            self.state_array: state_array,
+            self.state_round: state_round,
             self.dis_a_his: buffer_action,
             self.con_a_his: buffer_amount,
             self.v_target: buffer_v,
@@ -241,6 +270,9 @@ class ACNet:
             buffer_v_target.append(v_s_)
         buffer_v_target.reverse()
         return buffer_v_target
+
+    def game_start(self, state, playerid):
+        self.ep_r = 0
 
     def game_over(self, state, playerid):
 
@@ -277,17 +309,16 @@ class ACNet:
     def takeAction(self, state, playerid):
 
         to_call = state[1].call_price
-        feature = self.state2feature(state, playerseat=playerid)
-        action, amount = self.choose_action(feature)
+        featurearrays = self.state2featurearrays(state, playerseat=playerid) #
+        action, amount = self.choose_action(featurearrays)
         amount_ = int(amount * 1000)
 
         hands = [i for i in state.player_states[playerid].hand if i != -1]
         publics = [i for i in state.community_card if i != -1]
         action2action = {i: a for i, a in enumerate(['bet', 'call', 'check', 'fold'])}
-        print(action2action[action], amount_, card.deuces2cards(hands), card.deuces2cards(publics))
 
         # self.state_cache, self.action_cache, self.amount_cache = feature, action, amount
-        self.update_buffer(0, feature, action, amount)  # temp reward
+        self.update_buffer(0, featurearrays, action, amount)  # temp reward
 
         chips = 0
         for i in state[0]:
@@ -296,17 +327,96 @@ class ACNet:
 
         if action == 0:
             if chips < to_call:
+                print('CALL', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
                 return ACTION(action_table.CALL, int(amount_ + to_call))
+            print('RAISE', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
             return ACTION(action_table.RAISE, int(amount_ + to_call))
 
         elif action == 1:
+            print('CALL', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
             return ACTION(action_table.CALL, int(amount_+to_call))
 
+        if to_call > 0:
+            print('FOLD', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
+            return ACTION(action_table.FOLD, int(amount_ + to_call))
+        print('CHECK', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
         return ACTION(action_table.CHECK, int(amount_ + to_call))
         # elif action == 2:
         #     return ACTION(action_table.CHECK, int(amount_+to_call))
         # return ACTION(action_table.FOLD, int(amount_ + to_call))
 
+    def state2featurearrays(self, state, playerseat):
+
+        o_vector = list()
+        p_vector = None
+        hands = None
+
+        for p in state[0]:
+            if p.seat == playerseat:
+                hands = p.hand
+                p_vector = [p.isallin, p.playedthisround, p.betting / 1000, p.stack / 1000, p.betting / (p.stack + 1)]
+                # 5
+                continue
+            if not p.playing_hand:
+                continue
+
+            self.player_cache[p.seat].update({'isallin': int(p.isallin),
+                                              'betting': int(p.betting > 0),
+                                              'playing_hand': int(p.playing_hand),
+                                              'count': 1,
+                                              'winned': 0,
+                                              })
+            p_cache = self.player_cache[p.seat]
+            o_vector.append([int(p.isallin),
+                             int(p.playedthisround),
+                             int(p.betting > 0),
+                             p.betting / 1000,
+                             p.stack / 1000,
+                             p.betting / (p.stack + 1),
+
+                             p_cache['isallin'] / p_cache['count'],
+                             p_cache['betting'] / p_cache['count'],
+                             p_cache['playing_hand'] / p_cache['count'],
+                             p_cache['winned'] / p_cache['count'],
+
+                             p_cache['isallin'] / p_cache['playing_hand'],
+                             p_cache['betting'] / p_cache['playing_hand'],
+                             p_cache['winned'] / p_cache['playing_hand'],
+
+                             p_cache['winned'] / p_cache['isallin'],
+                             p_cache['winned'] / p_cache['betting'],
+                             p_cache['winned'] / p_cache['playing_hand'],
+                             ]) # 16
+
+        if not o_vector:
+            o_vector.append([0] * 16)
+        state_array = np.array(o_vector)  # n_opposite x 16
+
+        if p_vector is None:
+            p_vector = [0] * 5
+        p_vector = np.array(p_vector)  # 5
+
+        table = state[1]
+        t_vector = np.array([table.smallblind / 100,
+                             table.totalpot / 1000,
+                             table.lastraise / 1000,
+                             table.call_price / 1000,
+                             table.to_call / 1000,
+                             table.current_player / 10])  # 6
+
+        pt_vector = np.concatenate([p_vector, t_vector])  # 5 + 6 = 11
+
+        publics = state[2]
+        hands = [i for i in hands if i != -1]
+        publics = [i for i in publics if i != -1]
+
+        hand_array = card.deuces2features(hands)  # 14x4
+        public_array = card.deuces2features(publics)  # 14x4
+        card_array = card.deuces2features(hands + publics)
+
+        state_vector = np.concatenate([card_array, public_array, hand_array, pt_vector])
+
+        return state_vector, state_array, len(publics)  ## (52x3 + 11 = 167), (n_opposite x 16)
 
     def state2feature(self, state, playerseat):
 
@@ -336,6 +446,7 @@ class ACNet:
                              p.betting / 1000,
                              p.stack / 1000,
                              p.betting / (p.stack + 1),
+
                              p_cache['isallin'] / p_cache['count'],
                              p_cache['betting'] / p_cache['count'],
                              p_cache['playing_hand'] / p_cache['count'],

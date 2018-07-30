@@ -218,7 +218,7 @@ if __name__ == '__main__':
     from agent import randomAgent
     import sys
 
-    agent = A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model126', learning=True, hiring=True)
+    agent = A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model2', learning=True, hiring=True)
     # agent2 = A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model125', learning=True, hiring=True)
     # agent = A3CAgent(model_dir='./model')
     # get_agent = lambda: A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model125', learning=False, hiring=False)
@@ -238,7 +238,8 @@ if __name__ == '__main__':
               NpRandom(None, 'omggyy7', timeout=0.5, cores=1),
               NpRandom(None, 'omggyy8', timeout=0.5, cores=1),
               NpRandom(None, 'omggyy9', timeout=1, cores=1),
-              NpRandom(None, 'omggyyT', timeout=1, cores=1)]
+              NpRandom(None, 'omggyyT', timeout=1, cores=1)] + [
+        allCallModel(), allFoldModel(), allRaiseModel(),allinModel()]
 
     # o_list = [get_agent(), get_agent(), get_agent(), get_agent(), get_agent(), get_agent(), ]
     # o_list = [allCallModel(), allCallModel(), allCallModel(), allCallModel(), allCallModel(), allCallModel(), ]
@@ -247,29 +248,42 @@ if __name__ == '__main__':
 
 
     # agent.single_train(opposite_agents=simple_o_list,
-    #                    max_global_ep=10000,
-    #                    dump_global_iter=1000,
+    #                    max_global_ep=20000,
+    #                    dump_global_iter=300,
     #                    update_global_iter=5,
     #                    web=False,
     #                    oppositenum=5)
 
-    # agent.single_train(opposite_agents=o_list,
-    #                    max_global_ep=500,
-    #                    dump_global_iter=100,
-    #                    update_global_iter=1,
-    #                    web=False,
-    #                    oppositenum=9)
+    agent.single_train(opposite_agents=o_list,
+                       max_global_ep=500,
+                       dump_global_iter=100,
+                       update_global_iter=1,
+                       web=False,
+                       oppositenum=5)
 
-    # agent.single_train(opposite_agents=o_list,
-    #                    max_global_ep=1000,
-    #                    dump_global_iter=100,
-    #                    update_global_iter=3,
-    #                    web=False,
-    #                    oppositenum=9)
+    agent.single_train(opposite_agents=o_list,
+                       max_global_ep=1000,
+                       dump_global_iter=100,
+                       update_global_iter=3,
+                       web=False,
+                       oppositenum=5)
 
     agent.single_train(opposite_agents=o_list,
                        max_global_ep=10000,
-                       dump_global_iter=100,
+                       dump_global_iter=1000,
                        update_global_iter=5,
+                       web=False,
+                       oppositenum=5)
+
+    agent.single_train(opposite_agents=o_list,
+                       max_global_ep=10000,
+                       dump_global_iter=1000,
+                       update_global_iter=5,
+                       web=False,
+                       oppositenum=5)
+    agent.single_train(opposite_agents=o_list,
+                       max_global_ep=10000,
+                       dump_global_iter=1000,
+                       update_global_iter=10,
                        web=True,
                        oppositenum=9)

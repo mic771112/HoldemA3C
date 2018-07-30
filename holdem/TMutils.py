@@ -125,7 +125,9 @@ class ClientPlayer():
         print('players:')
         for idx, playerstate in enumerate(state.player_states):
             if playerstate.emptyplayer == False:
-                print('{}{}stack: {}'.format(idx, hand_to_str(playerstate.hand, mode), self._seats[idx].stack))
+                # print('{}{}stack: {}'.format(idx, hand_to_str(playerstate.hand, mode), self._seats[idx].stack))
+                print('{}{}stack: {}\t\tbetting: {}'.format(idx, hand_to_str(playerstate.hand, mode),
+                                                            self._seats[idx].stack, self._seats[idx].betting))
         print("<<<")
 
     def _reset(self):
@@ -279,6 +281,7 @@ class ClientPlayer():
                 player_info.reloadCount=p["reloadCount"]
                 player_info.betting = p["bet"]
                 player_info.currentbet = 0 # p["roundBet"]
+                player_info.total_betting = 0
                 try:
                     if len(p["cards"]) == 2:
                         p_card = [card_str_to_list(p["cards"][0]),card_str_to_list(p["cards"][1])]
@@ -320,7 +323,9 @@ class ClientPlayer():
                 player_info.isallin=p["allIn"]
                 player_info.sitting_out=not p["isSurvive"]
                 player_info.reloadCount=p["reloadCount"]
-                player_info.betting = p["bet"]
+                # player_info.betting = p["bet"]
+                player_info.total_betting = player_info.betting
+                player_info.betting = player_info.total_betting + p["bet"]
                 player_info.currentbet = 0 # p["roundBet"]
                 try:
                     if len(p["cards"]) == 2:
@@ -380,8 +385,8 @@ class ClientPlayer():
                     player_info.isallin = p["allIn"]
                     player_info.sitting_out = not p["isSurvive"]
                     player_info.reloadCount = p["reloadCount"]
-                    player_info.betting = p["bet"]
-
+                    # player_info.betting = p["bet"]
+                    player_info.betting = player_info.total_betting + p["bet"]
             # Update community_state
             self._tocall = self_minbet
             self._current_player = my_seat
@@ -474,7 +479,8 @@ class ClientPlayer():
                 player_info.isallin=p["allIn"]
                 player_info.sitting_out=not p["isSurvive"]
                 player_info.reloadCount=p["reloadCount"]
-                player_info.betting = p["bet"]
+                # player_info.betting = p["bet"]
+                player_info.betting = player_info.total_betting + p["bet"]
                 player_info.currentbet = 0 # p["roundBet"]
                 try:
                     if len(p["cards"]) == 2:
@@ -515,7 +521,8 @@ class ClientPlayer():
                 player_info.isallin=p["allIn"]
                 player_info.sitting_out=not p["isSurvive"]
                 player_info.reloadCount=p["reloadCount"]
-                player_info.betting = p["bet"]
+                # player_info.betting = p["bet"]
+                player_info.betting = player_info.total_betting + p["bet"]
                 player_info.currentbet = 0 # p["roundBet"]
                 try:
                     if len(p["cards"]) == 2:

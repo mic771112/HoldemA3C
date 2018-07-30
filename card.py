@@ -86,8 +86,13 @@ def array2features(array):
 def cards2features(cards):
     return array2features(array_average_inferring(cards2array(cards)))
 
+
 def deuces2features(deuces):
     return array2features(array_average_inferring(cards2array(deuces2cards(deuces))))
+
+
+def deuces2array(deuces):
+    return cards2array(deuces2cards(deuces))
 
 if __name__ == "__main__":
     assert sorted(ALL_DEUCES.keys()) == list(range(52))

@@ -89,6 +89,7 @@ class Worker:
             while not self.env.episode_end:  # single move in this loop is a round == a cycle
 
                 if geterror:
+                    print('geterror', geterror, 'check')
                     break
                 game_round += 1
                 local_round_count += 1
@@ -122,12 +123,18 @@ class Worker:
                         geterror = True
                         break
 
+                if geterror:
+                    print('====> repeat_round_card!')
+                    continue
                 # print('round end')
                 state = self.env.reset()
 
                 for s, a in self.learnable_agent.items():
                     a.round_end(state, s)
 
+            if geterror:
+                print('====> repeat_round_card!')
+                continue
             for s, a in self.learnable_agent.items():
                 a.game_over(state, s)
 
@@ -178,10 +185,10 @@ class Worker:
         learnableagents = self._get_learnable_agent(self.model_list)
         for seat, agent in learnableagents.items():
             if agent.buffer_s:
-                buffer_s = np.vstack(agent.buffer_s)
-                buffer_action = np.vstack(agent.buffer_action)
-                buffer_amount = np.vstack(agent.buffer_amount)
-                buffer_v = np.vstack(agent.buffer_v)
+                buffer_s = np.array(agent.buffer_s)
+                buffer_action = np.array(agent.buffer_action)
+                buffer_amount = np.array(agent.buffer_amount)
+                buffer_v = np.array(agent.buffer_v)
 
                 feed_dict = {
                     agent.s: buffer_s,
