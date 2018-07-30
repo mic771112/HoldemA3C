@@ -142,15 +142,15 @@ class ClientPlayer():
         self._last_action = None
         self._cycle += 1
 
-    def __roundNameToRound(self, rounName):
+    def __roundNameToRound(self, roundName):
         # Shanger 20180721
-        if rounName == "Deal":
+        if roundName == "Deal":
             return 0
-        elif rounName == "Flop":
+        elif roundName == "Flop":
             return 1
-        elif rounName == "Turn":
+        elif roundName == "Turn":
             return 2
-        elif rounName == "River":
+        elif roundName == "River":
             return 3
 
     def _new_round(self):
@@ -217,80 +217,130 @@ class ClientPlayer():
             self._tocall = max(self._tocall, self._bigblind)
         self._lastraise = max(self._lastraise, total_bet  - self._lastraise)
 
+    def _update_player_info(self, players):
+
+        # Update Player Information
+        for p in players:
+            i = self.__getPlayerSeatByName(p["playerName"])
+            player_info = self._player_dict[i]
+            player_info.playedthisround = False
+            player_info.stack = p["chips"]
+            player_info.playing_hand = not p["folded"]
+            player_info.isallin=p["allIn"]
+            player_info.sitting_out=not p["isSurvive"]
+            player_info.reloadCount=p["reloadCount"]
+            player_info.betting = p["bet"]
+            player_info.currentbet = 0 # p["roundBet"]
+            player_info.total_betting = 0
+            try:
+                if len(p["cards"]) == 2:
+                    p_card = [card_str_to_list(p["cards"][0]),card_str_to_list(p["cards"][1])]
+                else:
+                    p_card = [-1, -1]
+            except KeyError:
+                p_card = [-1, -1]
+                pass
+            player_info.hand = p_card
+
+    def _init_table(self, players, table):
+
+        self._round = self.__roundNameToRound(table["roundName"])
+        self._tableNumber = table["tableNumber"]
+
+        smallblind_name = table["smallBlind"]["playerName"]
+        smallblind_id = -1
+        bigblind_name = table["bigBlind"]["playerName"]
+        bigblind_id = -1
+
+        for i, p in enumerate(players):
+            # Add New Player
+            self._add_player(i, p["chips"], p["playerName"], p["reloadCount"])
+            if p["playerName"] == bigblind_name:
+                bigblind_id = i
+            if p["playerName"] == smallblind_name:
+                smallblind_id = i
+
+        # get button id
+        if smallblind_id + 1 == self.__getActiveSeats() and bigblind_id == 0:
+            button_id = smallblind_id - 1
+        elif smallblind_id == 0 and bigblind_id == 1:
+            button_id = self.__getActiveSeats() - 1
+        elif smallblind_id + 1 == bigblind_id:
+            button_id = smallblind_id - 1
+        else:
+            button_id = -1
+        if bigblind_id == self.__getActiveSeats() - 1:
+            current_player_seat = 0
+        else:
+            current_player_seat = bigblind_id + 1
+
+        self.button = button_id
+        self._smallblind = int(table["smallBlind"]["amount"])
+        self._bigblind = int(table["bigBlind"]["amount"])
+        self._tocall = int(table["bigBlind"]["amount"])
+        self._current_player = current_player_seat
+
+    def _update_table_info(self, table):
+        self._tableNumber = table["tableNumber"]
+        self._round = self.__roundNameToRound(table["roundName"])
+        self.community = [card_str_to_list(c) for c in table["board"]]
+        self._totalpot = table["totalBet"]
+
     def _handle_event(self, msg, data):
         if self._debug:
             print("[DEBUG] Event Trigger:  [{}]".format(msg))
 
-        if msg[:len("__new_peer")] == "__new_peer":
+        if msg == "__new_peer":
             return False
-        elif msg == "__join":
-            return False
+
+        elif msg == "__new_peer_2":
+
+            # unused:
+            # data["table"]["roundCount"]
+            # data["table"]["raiseCount"]
+            # data["table"]["betCount"]
+            # data["table"]["initChips"]
+            # data["table"]["maxReloadCount"]
+
+            print("---------------------------------")
+            print("[DEBUG] UPDATING GAME INFORMATION")
+            print("---------------------------------")
+
+            if True: # data["tableStatus"]
+                pass
+            else:
+                self._player_dict = {}
+                self._update_table_info(data["basicData"]["table"])
+                self._init_table(data["basicData"]["players"], data["basicData"]["table"])
+                self._update_player_info(data["basicData"]["players"])
+
+        elif msg == "_join":
+
+            print("---------------------------------")
+            print("[DEBUG]                      JOIN")
+            print("---------------------------------")
+
+            if False:
+                self._player_dict = {}
+                self._update_table_info(data["table"])
+                self._init_table(data["players"], data["table"])
+                self._update_player_info(data["players"])
+
         elif msg == "__game_prepare":
             return False
         elif msg == "__new_round":
+
+            print("---------------------------------")
+            print("[DEBUG]                 NEW ROUND")
+            print("---------------------------------")
 
             # No avtion, update state
             self._tocall = 0
             self._lastraise = 0
 
-            self._round = self.__roundNameToRound(data["table"]["roundName"])
-            self._tableNumber = data["table"]["tableNumber"]
+            self._init_table(data["players"], data["table"])
+            self._update_player_info(data["players"])
 
-            smallblind_name = data["table"]["smallBlind"]["playerName"]
-            smallblind_id = -1
-            bigblind_name = data["table"]["bigBlind"]["playerName"]
-            bigblind_id = -1
-
-            for i, p in enumerate(data["players"]):
-                # Add New Player
-                self._add_player(i, p["chips"], p["playerName"], p["reloadCount"])
-                if p["playerName"] == bigblind_name:
-                    bigblind_id = i
-                if p["playerName"] == smallblind_name:
-                    smallblind_id = i
-
-            # get button id
-            if smallblind_id + 1 == self.__getActiveSeats() and bigblind_id == 0:
-                button_id = smallblind_id - 1
-            elif smallblind_id == 0 and bigblind_id == 1:
-                button_id = self.__getActiveSeats() - 1
-            elif smallblind_id + 1 == bigblind_id:
-                button_id = smallblind_id - 1
-            else:
-                button_id = -1
-            if bigblind_id == self.__getActiveSeats() - 1:
-                current_player_seat = 0
-            else:
-                current_player_seat = bigblind_id + 1
-
-            self.button = button_id
-            self._smallblind = int(data["table"]["smallBlind"]["amount"])
-            self._bigblind = int(data["table"]["bigBlind"]["amount"])
-            self._tocall = int(data["table"]["bigBlind"]["amount"])
-            self._current_player = current_player_seat
-
-            # Update Player Information
-            for p in data["players"]:
-                i = self.__getPlayerSeatByName(p["playerName"])
-                player_info = self._player_dict[i]
-                player_info.playedthisround = False
-                player_info.stack = p["chips"]
-                player_info.playing_hand = not p["folded"]
-                player_info.isallin=p["allIn"]
-                player_info.sitting_out=not p["isSurvive"]
-                player_info.reloadCount=p["reloadCount"]
-                player_info.betting = p["bet"]
-                player_info.currentbet = 0 # p["roundBet"]
-                player_info.total_betting = 0
-                try:
-                    if len(p["cards"]) == 2:
-                        p_card = [card_str_to_list(p["cards"][0]),card_str_to_list(p["cards"][1])]
-                    else:
-                        p_card = [-1, -1]
-                except KeyError:
-                    p_card = [-1, -1]
-                    pass
-                player_info.hand = p_card
             my_seat = self.__getPlayerSeatByName(self._name)
             self._model.new_round(self.get_current_state(), my_seat)
             return False
@@ -553,8 +603,8 @@ class ClientPlayer():
         elif msg == "__game_start":
             if self._debug:
                 print("[DEBUG] {} {} ". format(msg, data))
-            my_seat = self.__getPlayerSeatByName(self._name)
-            self._model.game_start(self.get_current_state(), my_seat)
+            #my_seat = self.__getPlayerSeatByName(self._name)
+            #self._model.game_start(self.get_current_state(), my_seat)
             return True # not interesting
         else:
             print("[Error] Unknown Event message [{}]".format(msg))
