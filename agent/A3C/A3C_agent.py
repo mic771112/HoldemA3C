@@ -199,6 +199,9 @@ class A3CAgent:
     def game_over(self, state, playerid):
         return self.global_net.game_over(state, playerid)
 
+    def game_start(self, state, playerid):
+        return self.global_net.game_start(state, playerid)
+
     def single_train(self, opposite_agents, max_global_ep=100, dump_global_iter=3000, update_global_iter=1, web=False,
                     oppositenum=5):
         self.train(opposite_agents,
@@ -271,20 +274,20 @@ if __name__ == '__main__':
     agent.single_train(opposite_agents=o_list,
                        max_global_ep=10000,
                        dump_global_iter=300,
-                       update_global_iter=5,
+                       update_global_iter=7,
                        web=False,
                        oppositenum=5)
 
     agent.single_train(opposite_agents=o_list,
                        max_global_ep=10000,
                        dump_global_iter=300,
-                       update_global_iter=5,
+                       update_global_iter=7,
                        web=False,
                        oppositenum=5)
 
     agent.single_train(opposite_agents=o_list,
                        max_global_ep=10000,
                        dump_global_iter=1000,
-                       update_global_iter=10,
+                       update_global_iter=11,
                        web=True,
                        oppositenum=9)
