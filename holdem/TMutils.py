@@ -33,9 +33,9 @@ class ClientPlayer():
 
         # community_information
         self._round = 0
-        self._button = 0
-        self._smallblind = 0
-        self._bigblind = 0
+        self._button = 0 # id
+        self._smallblind = 0 # amount
+        self._bigblind = 0 # amount
 
         self._tableNumber = ""
 
@@ -43,7 +43,7 @@ class ClientPlayer():
         self._evaluator = Evaluator()
 
         self.community = []
-        self._discard = [] # Not used here, can not get the informatiom
+        self._discard = [] # Not used here, can not get the information
 
         self._current_sidepot = 0  # index of _side_pots
         self._totalpot = 0
@@ -226,9 +226,9 @@ class ClientPlayer():
             player_info.playedthisround = False
             player_info.stack = p["chips"]
             player_info.playing_hand = not p["folded"]
-            player_info.isallin=p["allIn"]
-            player_info.sitting_out=not p["isSurvive"]
-            player_info.reloadCount=p["reloadCount"]
+            player_info.isallin = p["allIn"]
+            player_info.sitting_out = not p["isSurvive"]
+            player_info.reloadCount = p["reloadCount"]
             player_info.betting = p["bet"]
             player_info.currentbet = 0 # p["roundBet"]
             player_info.total_betting = 0
@@ -239,7 +239,7 @@ class ClientPlayer():
                     p_card = [-1, -1]
             except KeyError:
                 p_card = [-1, -1]
-                pass
+
             player_info.hand = p_card
 
     def _init_table(self, players, table):
@@ -274,10 +274,10 @@ class ClientPlayer():
         else:
             current_player_seat = bigblind_id + 1
 
-        self.button = button_id
+        self._button = button_id
         self._smallblind = int(table["smallBlind"]["amount"])
         self._bigblind = int(table["bigBlind"]["amount"])
-        self._tocall = int(table["bigBlind"]["amount"])
+        self._tocall = self._bigblind
         self._current_player = current_player_seat
 
     def _update_table_info(self, table):
@@ -290,10 +290,15 @@ class ClientPlayer():
         if self._debug:
             print("[DEBUG] Event Trigger:  [{}]".format(msg))
 
-        if msg == "__new_peer":
+        '''
+            after __game_start follows __new_peer, __new_peer_2, _join. __action ...
+            after __start_reload follows __round_end, __new_round. __show_action ...
+        '''
+
+        if msg == "__new_peer": # sent for every new peer
             return False
 
-        elif msg == "__new_peer_2":
+        elif msg == "__new_peer_2": # sent for every new peer
 
             # unused:
             # data["table"]["roundCount"]
@@ -306,7 +311,7 @@ class ClientPlayer():
             print("[DEBUG] UPDATING GAME INFORMATION")
             print("---------------------------------")
 
-            if True: # data["tableStatus"]
+            if data["tableStatus"] == 0:
                 pass
             else:
                 self._player_dict = {}
@@ -314,6 +319,15 @@ class ClientPlayer():
                 self._init_table(data["basicData"]["players"], data["basicData"]["table"])
                 self._update_player_info(data["basicData"]["players"])
 
+        elif msg == "__left": # sent for every peer which disconnects
+            # {"eventName":"__left","data":["8a8bb7cd343aa2ad99b7d762030857a2","9d607a663f3e9b0a90c3c8d4426640dc","931ffe4c39bc9fdc875cf8f691bf1f57","32cfe6c19200b67afb7c3d0e1c43eadb","894f782a148b33af1e39a0efed952d69"]}
+
+            return False
+        elif msg == "__left_2": # sent for every peer which disconnects
+            # {"eventName":"__left_2","data":{"tableNumber":"1","players":[{"playerName":"8a8bb7cd343aa2ad99b7d762030857a2","isOnline":true},{"playerName":"9d607a663f3e9b0a90c3c8d4426640dc","isOnline":true},{"playerName":"931ffe4c39bc9fdc875cf8f691bf1f57","isOnline":true},{"playerName":"32cfe6c19200b67afb7c3d0e1c43eadb","isOnline":true},{"playerName":"894f782a148b33af1e39a0efed952d69","isOnline":true}],"tableStatus":0}}
+
+            return False
+                
         elif msg == "_join":
 
             print("---------------------------------")
@@ -326,6 +340,10 @@ class ClientPlayer():
                 self._init_table(data["players"], data["table"])
                 self._update_player_info(data["players"])
 
+            my_seat = self.__getPlayerSeatByName(self._name)
+            self._model.new_round(self.get_current_state(), my_seat)
+            return False
+
         elif msg == "__game_prepare":
             return False
         elif msg == "__new_round":
@@ -334,8 +352,8 @@ class ClientPlayer():
             print("[DEBUG]                 NEW ROUND")
             print("---------------------------------")
 
-            # No avtion, update state
-            self._tocall = 0
+            # No action, update state
+            self._tocall = 0 # not needed?
             self._lastraise = 0
 
             self._init_table(data["players"], data["table"])
@@ -507,10 +525,11 @@ class ClientPlayer():
                 if self._debug:
                     print('[DEBUG] Player', self._current_player, data["action"]["action"], data["action"]["amount"])
             elif data["action"]["action"] == "check":
-                # self._player_bet(player_info, data["action"]["amount"])  # Shanger : error with Keyerror : amount
-                self._player_bet(player_info, 0)
+                # amount = data["action"]["amount"]# Shanger : error with Keyerror : amount
+                amount = 0
+                self._player_bet(player_info, amount)
                 if self._debug:
-                    print('[DEBUG] Player', self._current_player, "check", data["action"]["amount"])
+                    print('[DEBUG] Player', self._current_player, "check", amount)
             elif data["action"]["action"] == "call":
                 self._tocall = data["action"]["amount"]
                 self._player_bet(player_info, self._tocall)
@@ -625,6 +644,9 @@ class ClientPlayer():
                 result = self.ws.recv()
                 if self._debug:
                     print("[DEBUG] recv: {}".format(result))
+                if not result:
+                    print("empty response sent. wrong username?")
+                    break
                 msg = json.loads(result)
                 terminal = self._handle_event(msg["eventName"], msg["data"])
                 if terminal:
