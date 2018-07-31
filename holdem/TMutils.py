@@ -299,6 +299,7 @@ class ClientPlayer():
             return False
 
         elif msg == "__new_peer_2": # sent for every new peer
+            pass
 
             # unused:
             # data["table"]["roundCount"]
