@@ -270,13 +270,6 @@ if __name__ == '__main__':
     #                    update_global_iter=3,
     #                    web=False,
     #                    oppositenum=5)
-    #
-    agent.single_train(opposite_agents=o_list,
-                       max_global_ep=10000,
-                       dump_global_iter=300,
-                       update_global_iter=7,
-                       web=False,
-                       oppositenum=5)
 
     agent.single_train(opposite_agents=o_list,
                        max_global_ep=10000,
@@ -287,7 +280,14 @@ if __name__ == '__main__':
 
     agent.single_train(opposite_agents=o_list,
                        max_global_ep=10000,
-                       dump_global_iter=1000,
+                       dump_global_iter=300,
                        update_global_iter=11,
-                       web=True,
-                       oppositenum=9)
+                       web=False,
+                       oppositenum=5)
+    #
+    # agent.single_train(opposite_agents=o_list,
+    #                    max_global_ep=10000,
+    #                    dump_global_iter=1000,
+    #                    update_global_iter=11,
+    #                    web=True,
+    #                    oppositenum=9)

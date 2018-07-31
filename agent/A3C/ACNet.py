@@ -27,8 +27,8 @@ class ACNet:
 
         self.con_weight = 0.02
         self.gamma = 0.95
-        self.con_entropy_beta = 0.01
-        self.dis_entropy_beta = 0.05
+        self.con_entropy_beta = 0.1
+        self.dis_entropy_beta = 0.1
         self.training = training
         self.globalmodel = globalmodel
 

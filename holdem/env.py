@@ -32,6 +32,9 @@ class TexasHoldemEnv(Env, utils.EzPickle):
     BLIND_INCREMENTS = [[10,20], [20,40], [40,80], [80,160], [160,320], [320,640], [640,1280], [1280, 2560], [2560, 5120], [5120, 10240]]
 
     def __init__(self, n_seats, max_limit=20000, debug=False):
+        super(Env, self).__init__()
+        super(utils.EzPickle, self).__init__()
+
         n_suits = 4                     # s,h,d,c
         n_ranks = 13                    # 2,3,4,5,6,7,8,9,T,J,Q,K,A
         n_community_cards = 5           # flop, turn, river
@@ -194,7 +197,6 @@ class TexasHoldemEnv(Env, utils.EzPickle):
             terminal = True
             self._resolve_round(players)
             return self._get_current_step_returns(terminal)
-
 
         self._last_player = self._current_player
         self._last_actions = actions
