@@ -617,14 +617,18 @@ class ClientPlayer():
                 print("[DEBUG] {} {} ". format(msg, data))
             my_seat = self.__getPlayerSeatByName(self._name)
             self._model.game_over(self.get_current_state(), my_seat)
-            return True # not interesting
+            return True
 
         elif msg == "__game_start":
             if self._debug:
                 print("[DEBUG] {} {} ". format(msg, data))
             #my_seat = self.__getPlayerSeatByName(self._name)
             #self._model.game_start(self.get_current_state(), my_seat)
-            return True # not interesting
+            return False
+
+        elif msg == "__game_stop":
+            return False
+
         else:
             print("[Error] Unknown Event message [{}]".format(msg))
             return False
