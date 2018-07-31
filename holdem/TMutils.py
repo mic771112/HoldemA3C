@@ -307,38 +307,30 @@ class ClientPlayer():
             # data["table"]["initChips"]
             # data["table"]["maxReloadCount"]
 
-            print("---------------------------------")
-            print("[DEBUG] UPDATING GAME INFORMATION")
-            print("---------------------------------")
-
-            if data["tableStatus"] == 0:
-                pass
-            else:
-                self._player_dict = {}
-                self._update_table_info(data["basicData"]["table"])
-                self._init_table(data["basicData"]["players"], data["basicData"]["table"])
-                self._update_player_info(data["basicData"]["players"])
+            # print("---------------------------------")
+            # print("[DEBUG] UPDATING GAME INFORMATION")
+            # print("---------------------------------")
 
         elif msg == "__left": # sent for every peer which disconnects
             # {"eventName":"__left","data":["8a8bb7cd343aa2ad99b7d762030857a2","9d607a663f3e9b0a90c3c8d4426640dc","931ffe4c39bc9fdc875cf8f691bf1f57","32cfe6c19200b67afb7c3d0e1c43eadb","894f782a148b33af1e39a0efed952d69"]}
 
             return False
+
         elif msg == "__left_2": # sent for every peer which disconnects
             # {"eventName":"__left_2","data":{"tableNumber":"1","players":[{"playerName":"8a8bb7cd343aa2ad99b7d762030857a2","isOnline":true},{"playerName":"9d607a663f3e9b0a90c3c8d4426640dc","isOnline":true},{"playerName":"931ffe4c39bc9fdc875cf8f691bf1f57","isOnline":true},{"playerName":"32cfe6c19200b67afb7c3d0e1c43eadb","isOnline":true},{"playerName":"894f782a148b33af1e39a0efed952d69","isOnline":true}],"tableStatus":0}}
 
             return False
-                
+
         elif msg == "_join":
 
             print("---------------------------------")
             print("[DEBUG]                      JOIN")
             print("---------------------------------")
 
-            if False:
-                self._player_dict = {}
-                self._update_table_info(data["table"])
-                self._init_table(data["players"], data["table"])
-                self._update_player_info(data["players"])
+            self._player_dict = {}
+            self._update_table_info(data["table"])
+            self._init_table(data["players"], data["table"])
+            self._update_player_info(data["players"])
 
             my_seat = self.__getPlayerSeatByName(self._name)
             self._model.new_round(self.get_current_state(), my_seat)
@@ -346,6 +338,7 @@ class ClientPlayer():
 
         elif msg == "__game_prepare":
             return False
+
         elif msg == "__new_round":
 
             print("---------------------------------")
