@@ -24,7 +24,7 @@ logging.basicConfig(level=logging.DEBUG)
 
 class A3CAgent:
 
-    def __init__(self, model_dir, learning=True, hiring=True):
+    def __init__(self, model_dir, learning=True, hiring=True, n_workers=None):
 
         self.sess = None
         self.saver = None
@@ -36,16 +36,20 @@ class A3CAgent:
         self.model_dir = model_dir
         self.log_dir = '{}/log/'.format(self.model_dir)
         self.ckpt_path = '{}/ckpt/'.format(self.model_dir)
+
         pathlib.Path(self.log_dir).mkdir(parents=True, exist_ok=True)
         pathlib.Path(self.model_dir).mkdir(parents=True, exist_ok=True)
 
-        self.lr_a = 1e-5
-        self.lr_c = 1e-5
+        self.lr_a = 3e-6
+        self.lr_c = 1e-7
 
         self.update_global_iter = 100000
         self.dump_global_iter = 3571
         self.final_dumped = False
-        self.n_workers = 8  # multiprocessing.cpu_count()
+        if n_workers is None:
+            self.n_workers = multiprocessing.cpu_count()
+        else:
+            self.n_workers = n_workers
         self.global_net = ACNet(mother=self,
                                 scope=self.global_scope,
                                 sess=self.sess,
@@ -79,35 +83,40 @@ class A3CAgent:
 
     def load_sess(self):
         self.sess = tf.Session()
-        self.saver = tf.train.Saver(name='saver', max_to_keep=15)
+        self.saver = tf.train.Saver(name='saver', max_to_keep=100)
 
         try:
+            print('self.ckpt_path', self.ckpt_path)
             ckpt = tf.train.get_checkpoint_state(self.ckpt_path)
             # if ckpt and ckpt.model_checkpoint_path:
             self.saver.restore(self.sess, ckpt.model_checkpoint_path)
+            step = self.global_net.global_step.eval(session=self.sess)
+            print('step:', step)
             logging.error('ckpt read')
 
-        except (tf.errors.NotFoundError, ValueError, AttributeError):
+        except (tf.errors.NotFoundError, ValueError, AttributeError) as e:
+            print(e)
             config = tf.ConfigProto()
             config.gpu_options.allow_growth = True
             self.sess = tf.Session(config=config)
             self.sess.run(tf.global_variables_initializer())
             logging.error('no ckpt read')
 
-    def dump_sess(self, global_step=None, extra_path=''):
-        self.sess.run(tf.assign_add(global_step, 1))
+    def dump_sess(self, extra_path=''):
+        self.sess.run(tf.assign_add(self.global_net.global_step, 1))
+        print('[self.global_net.global_step]', self.global_net.global_step)
         path = self.ckpt_path + extra_path
 
         try:
-            if global_step is not None:
-                self.saver.save(self.sess, path, global_step=global_step)
+            if self.global_net.global_step is not None:
+                self.saver.save(self.sess, path, global_step=self.global_net.global_step)
             else:
                 self.saver.save(self.sess, path)
             logging.error('ckpt saved: {}'.format(path))
         except:
             time.sleep(5)
-            if global_step is not None:
-                self.saver.save(self.sess, path, global_step=global_step)
+            if self.global_net.global_step is not None:
+                self.saver.save(self.sess, path, global_step=self.global_net.global_step)
             else:
                 self.saver.save(self.sess, path)
             logging.error('ckpt saved: {}'.format(path))
@@ -128,18 +137,18 @@ class A3CAgent:
                                            learning=self.learning
                                            ))
             self.sess.run(tf.global_variables_initializer())
-            self.load_sess()
+            # self.load_sess()
             for worker in self.workers:
                 worker.AC.pull_global()
 
-    def train(self, opposite_agents, max_global_ep=100, update_global_iter=137, gamma=0.99, dump_global_iter=3571, web=True, oppositenum=9):
+    def train(self, opposite_agents, max_global_ep=100, update_global_iter=137, gamma=0.99, dump_global_iter=3571, web=True, oppositenum=9, uris=list(), names=list()):
 
         self.update_global_iter = update_global_iter
         self.dump_global_iter = dump_global_iter
 
         self.dump_tensorboard()
         worker_threads = list()
-        for worker in self.workers:
+        for i, worker in enumerate(self.workers):
             if web:
                 def job():
                     try:
@@ -148,7 +157,9 @@ class A3CAgent:
                                        update_global_iter=update_global_iter,
                                        gamma=gamma,
                                        dump_global_iter=dump_global_iter,
-                                       oppositenum=oppositenum)
+                                       oppositenum=oppositenum,
+                                       uri=uris[i],
+                                       name=names[i])
                     except ValueError as e:
                         while True:
                             print(e)
@@ -158,7 +169,9 @@ class A3CAgent:
                                            update_global_iter=update_global_iter,
                                            gamma=gamma,
                                            dump_global_iter=dump_global_iter,
-                                           oppositenum=oppositenum)
+                                           oppositenum=oppositenum,
+                                           uri=uris[i],
+                                           name=names[i])
             else:
                 def job():
                     try:
@@ -203,14 +216,16 @@ class A3CAgent:
         return self.global_net.game_start(state, playerid)
 
     def single_train(self, opposite_agents, max_global_ep=100, dump_global_iter=3000, update_global_iter=1, web=False,
-                    oppositenum=5):
+                    oppositenum=5, uris=list(), names=list()):
         self.train(opposite_agents,
                    max_global_ep=max_global_ep,
                    dump_global_iter=dump_global_iter,
                    update_global_iter=update_global_iter,
                    web=web,
-                   oppositenum=oppositenum)  # 3571
-        self.dump_sess(global_step=agent.global_net.global_step)
+                   oppositenum=oppositenum,
+                   uris=uris,
+                   names=names)  # 3571
+        self.dump_sess()
         self.global_ep = 0
 
 if __name__ == '__main__':
@@ -221,10 +236,9 @@ if __name__ == '__main__':
     from agent import randomAgent
     import sys
 
-    agent = A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model2', learning=True, hiring=True)
-    # agent2 = A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model125', learning=True, hiring=True)
-    # agent = A3CAgent(model_dir='./model')
-    # get_agent = lambda: A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model125', learning=False, hiring=False)
+    model_dir = 'C:/Users/shanger_lin/Desktop/models/A3CAgent/model22'
+    agent = A3CAgent(model_dir=model_dir, learning=True, hiring=True, n_workers=4)
+
     sys.path.append('../../')
     from agent.MonteCarlo.agent import NpRandom
     simple_o_list = [allCallModel()] * 10 \
@@ -240,54 +254,34 @@ if __name__ == '__main__':
               NpRandom(None, 'omggyy6', timeout=0.5, cores=1),
               NpRandom(None, 'omggyy7', timeout=0.5, cores=1),
               NpRandom(None, 'omggyy8', timeout=0.5, cores=1),
-              NpRandom(None, 'omggyy9', timeout=1, cores=1),
-              NpRandom(None, 'omggyyT', timeout=1, cores=1)] + [
-        allCallModel(), allFoldModel(), allRaiseModel(),allinModel()]
+              NpRandom(None, 'omggyy9', timeout=0.5, cores=1),
+              NpRandom(None, 'omggyyT', timeout=0.25, cores=1)] + [
+        allCallModel(), allFoldModel(), allRaiseModel(),allinModel()] + simple_o_list
 
-    # o_list = [get_agent(), get_agent(), get_agent(), get_agent(), get_agent(), get_agent(), ]
-    # o_list = [allCallModel(), allCallModel(), allCallModel(), allCallModel(), allCallModel(), allCallModel(), ]
-    # o_list = [A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/modoel14', learning=True),
-    #           A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/modoel14', learning=True)]
-
-
-    # agent.single_train(opposite_agents=simple_o_list,
-    #                    max_global_ep=20000,
-    #                    dump_global_iter=300,
-    #                    update_global_iter=5,
-    #                    web=False,
-    #                    oppositenum=5)
-    #
-    # agent.single_train(opposite_agents=o_list,
-    #                    max_global_ep=500,
-    #                    dump_global_iter=100,
-    #                    update_global_iter=1,
-    #                    web=False,
-    #                    oppositenum=5)
-    #
-    # agent.single_train(opposite_agents=o_list,
-    #                    max_global_ep=1000,
-    #                    dump_global_iter=100,
-    #                    update_global_iter=3,
-    #                    web=False,
-    #                    oppositenum=5)
 
     agent.single_train(opposite_agents=o_list,
-                       max_global_ep=10000,
-                       dump_global_iter=300,
-                       update_global_iter=7,
+                       max_global_ep=30000,
+                       dump_global_iter=150,
+                       update_global_iter=5,
                        web=False,
                        oppositenum=5)
 
-    agent.single_train(opposite_agents=o_list,
-                       max_global_ep=10000,
-                       dump_global_iter=300,
-                       update_global_iter=11,
-                       web=False,
-                       oppositenum=5)
+
+
+
     #
-    # agent.single_train(opposite_agents=o_list,
-    #                    max_global_ep=10000,
-    #                    dump_global_iter=1000,
-    #                    update_global_iter=11,
-    #                    web=True,
-    #                    oppositenum=9)
+    uris = ['ws://poker-dev.wrs.club:3001/'] * 11 + ['ws://poker-training.vtr.trendnet.org:3001/'] * 6
+    names = [str(i) for i in [5550, 5551, 5552, 5553, 5554, 5560, 5561, 5562, 5563, 5564, 5565,
+                              'omgt1','omgt2', 'omgt3', 'omgt4', 'omgt5', 'omgt']]  # , 'omg', 'omgg', 'omggy', 'omggyy', 5559
+    assert len(uris) == len(names)
+    agent = A3CAgent(model_dir=model_dir, learning=True, hiring=True, n_workers=len(names))
+
+    agent.single_train(opposite_agents=list(),
+                       max_global_ep=1000000,
+                       dump_global_iter=10,
+                       update_global_iter=1,
+                       web=True,
+                       oppositenum=9,
+                       uris=uris,
+                       names=names, #
+                       )

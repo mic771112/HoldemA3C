@@ -22,9 +22,10 @@ class Worker:
         self.round_start_stack = None
 
 
-    def webwork(self, opposite_agents, max_global_ep, update_global_iter, gamma, dump_global_iter, uri='ws://poker-training.vtr.trendnet.org:3001/', oppositenum=9):
+    def webwork(self, opposite_agents, max_global_ep, update_global_iter, gamma, dump_global_iter, name, uri='ws://poker-training.vtr.trendnet.org:3001/', oppositenum=9):
+
         self.mother.final_dumped = False
-        time.sleep(np.random.randint(100))
+        # time.sleep(np.random.randint(100))
         local_game_count = 0
         local_round_count = 0
         # self.env_init(opposite_agents)
@@ -32,14 +33,15 @@ class Worker:
         # self.learnable_agent = self._get_learnable_agent(self.model_list)
 
         while not self.mother.coord.should_stop() and self.mother.global_ep < max_global_ep:  # single move in this loop is a game == a episode
-            time.sleep(np.random.randint(5, 20))
+            # time.sleep(np.random.randint(5, 20))
             local_game_count += 1
-            name = 'omg' + str((int(str(self.name)[-1])+self.mother.web_shift) % 16)
+            # name = 'omg' + str((int(str(self.name)[-1])+self.mother.web_shift) % 16)
             try:
+                print('connect to {} as {}'.format(uri, name))
                 client_player = holdem.ClientPlayer(uri, name, self.AC, debug=False, playing_live=False)
                 client_player.doListen()
             except:
-                self.mother.web_shift += self.mother.n_workers
+                time.sleep(60)
 
     @staticmethod
     def check_repeat_round_card(state):
@@ -56,9 +58,6 @@ class Worker:
             print(card.deuces2cards([i for i in state.community_card if i > 0]))
 
             return True
-
-
-
 
     def work(self, opposite_agents, max_global_ep, update_global_iter, gamma, dump_global_iter, uri=None, oppositenum=9):
         self.mother.final_dumped = False

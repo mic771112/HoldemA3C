@@ -230,8 +230,9 @@ class ClientPlayer():
             player_info.sitting_out = not p["isSurvive"]
             player_info.reloadCount = p["reloadCount"]
             player_info.betting = p["bet"]
-            player_info.currentbet = 0 # p["roundBet"]
             player_info.total_betting = 0
+            player_info.currentbet = 0 # p["roundBet"]
+
             try:
                 if len(p["cards"]) == 2:
                     p_card = [card_str_to_list(p["cards"][0]),card_str_to_list(p["cards"][1])]
@@ -436,7 +437,11 @@ class ClientPlayer():
             my_player_info.sitting_out=data["self"]["isSurvive"]
 
             self_bet = data["self"]["bet"] # money already in pot
-            self_minbet = data["self"]["minBet"] # minimun to call
+
+            if msg == "__bet":  ## Shanger
+                self_minbet = 0 # minimun to call
+            else:
+                self_minbet = data["self"]["minBet"]
 
             for p in data["game"]["players"]:
                 i = self.__getPlayerSeatByName(p["playerName"])
@@ -449,6 +454,7 @@ class ClientPlayer():
                     player_info.reloadCount = p["reloadCount"]
                     # player_info.betting = p["bet"]
                     player_info.betting = player_info.total_betting + p["bet"]
+
             # Update community_state
             self._tocall = self_minbet
             self._current_player = my_seat

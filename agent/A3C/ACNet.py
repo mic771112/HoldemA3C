@@ -25,10 +25,10 @@ class ACNet:
         self.game_count = 0
         self.ep_r = 0
 
-        self.con_weight = 0.02
+        self.con_weight = 0.05
         self.gamma = 0.95
         self.con_entropy_beta = 0.1
-        self.dis_entropy_beta = 0.1
+        self.dis_entropy_beta = 0.03
         self.training = training
         self.globalmodel = globalmodel
 
@@ -49,7 +49,7 @@ class ACNet:
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
             # c_array, o_array, pt_vector = s  ## (14, 4, 3), (16 x n_opposite), (11)
 
-            self.global_step = tf.Variable(0, trainable=False)
+            self.global_step = tf.Variable(0, trainable=True)
 
 
             # self.s = tf.placeholder(tf.float32, [None, self.state_size], 'S')
@@ -63,7 +63,7 @@ class ACNet:
 
             self.a_prob, self.mu, self.sigma, self.v, self.a_params, self.c_params = self._build_net(scope)
             # self.a_prob : [raise, call, check, fold]
-            self.mask = tf.cast(tf.not_equal(tf.argmax(self.a_prob), 0), tf.float32)  # con loss mask for non-raise
+            self.mask = tf.cast(tf.equal(tf.argmax(self.a_prob), 2), tf.float32)  # con loss mask for non-raise
 
             normal_dist = tf.distributions.Normal(self.mu, self.sigma + 1e-5)
 
@@ -140,7 +140,7 @@ class ACNet:
     def _build_net(self, scope, layer_nodes=256, convergence_node=16):
         # w_init = tf.random_normal_initializer(0, 0.1)
         w_init = tf.glorot_uniform_initializer()
-        drop_prob = 0.2
+        drop_prob = 0.1
 
         self.state_vector = tf.placeholder(tf.float32, [None, 167], 's_vector')
         self.state_array = tf.placeholder(tf.float32, [None, None, 16], 's_array')
@@ -149,8 +149,10 @@ class ACNet:
         round_embeddings_for_concat = tf.get_variable('round_embeddings_for_concat', [6, 16])
         embedded_round_for_concat = tf.gather(round_embeddings_for_concat, self.state_round)
 
-        round_embeddings = tf.get_variable('word_embeddings', [6, layer_nodes])
+        round_embeddings = tf.get_variable('round_embeddings_for_add', [6, layer_nodes])
         embedded_round = tf.gather(round_embeddings, self.state_round)
+        embedded_round1 = tf.layers.dense(embedded_round, layer_nodes, kernel_initializer=w_init)
+        embedded_round2 = tf.layers.dense(embedded_round, layer_nodes, kernel_initializer=w_init)
 
         cell_fw = tf.contrib.rnn.MultiRNNCell([tf.nn.rnn_cell.LSTMCell(i) for i in [32, 32]])
         cell_bw = tf.contrib.rnn.MultiRNNCell([tf.nn.rnn_cell.LSTMCell(i) for i in [32, 32]])
@@ -161,9 +163,11 @@ class ACNet:
 
         main_layer = tf.layers.dense(o_vector, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
         main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
-        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + embedded_round
+        main_layer = tf.layers.dense(o_vector, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
         main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
-        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + embedded_round
+        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + embedded_round1
+        main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + embedded_round2
         main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
         main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
         main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
@@ -186,7 +190,7 @@ class ACNet:
             l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
             l_c = tf.layers.dense(main_layer, convergence_node, tf.nn.relu, kernel_initializer=w_init)
             l_c = tf.layers.dense(l_c, convergence_node, tf.nn.relu, kernel_initializer=w_init)
-            v = tf.layers.dense(l_c, 1, tf.nn.relu, kernel_initializer=w_init, name='v')  # state value
+            v = tf.layers.dense(l_c, 1, kernel_initializer=w_init, name='v')  # state value
 
         a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope + '/actor')
         c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope + '/critic')
@@ -195,7 +199,7 @@ class ACNet:
 
     def getReload(self, state):
         # print('we got asking for reloading')
-        return False
+        return True
 
     # def reset_cache(self):
     #     self.player_cache = PLAYER_CACHES_INIT.copy()
@@ -214,11 +218,16 @@ class ACNet:
         self.game_round += 1
         self.ep_r += rewards[playerid]
 
+
         for s, pr in enumerate(rewards):
             self.player_cache[s].update({'winned': 0 if not pr else (pr / abs(pr))})
 
         if self.buffer_r:  # for non action round, ex: as play as bb while all others fold
-            r = rewards[playerid] / 1000
+            print('{} ---> round r: {} <---'.format(self.name, rewards[playerid]), end=' ')
+            rewards = [i/1000 if (i >= (-2 * state[1].smallblind)) else i/300 for i in rewards]  # reward warpping
+            r = rewards[playerid]
+            # r = rewards[playerid] / 1000
+            print('warpped: {}'.format(r))
             self.buffer_r[-1] = r  # (r / (abs(r)+1)) * (r ** 2)
             buffer_v_target = self._get_v(self.buffer_r, gamma=self.gamma)
 
@@ -287,13 +296,13 @@ class ACNet:
 
         if not global_ep % self.mother.dump_global_iter:
             if self.training:
-                self.mother.dump_sess(global_step=self.globalmodel.global_step)
+                self.mother.dump_sess()
                 print('ckpt dumped')
 
 
         self.mother.global_running_r.append(self.ep_r)
         self.mother.global_running_r = self.mother.global_running_r[-1000:]
-        print('{}\tEp:{}| GameRound:{} | Ep_r:{}| Ep_r_avg:{}'.format(
+        print('{} =======>\tEp:{}| GameRound:{} | Ep_r:{}| Ep_r_avg:{} <========'.format(
             self.name,
             global_ep,
             self.game_round,
@@ -308,7 +317,8 @@ class ACNet:
 
     def takeAction(self, state, playerid):
 
-        to_call = state[1].call_price
+        to_call = state[1].to_call
+        # to_call = state[1].call_price
         featurearrays = self.state2featurearrays(state, playerseat=playerid) #
         action, amount = self.choose_action(featurearrays)
         amount_ = int(amount * 1000)
@@ -326,21 +336,21 @@ class ACNet:
                 chips = i.stack
 
         if action == 0:
-            if chips < to_call:
-                print('CALL', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
-                return ACTION(action_table.CALL, int(amount_ + to_call))
-            print('RAISE', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
-            return ACTION(action_table.RAISE, int(amount_ + to_call))
+            if chips < to_call or amount_ <= to_call:
+                print(self.name, 'action:', action, 'CALL', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
+                return ACTION(action_table.CALL, int(amount_))
+            print(self.name, 'action:', action, 'RAISE', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
+            return ACTION(action_table.RAISE, int(amount_))
 
-        elif action == 1:
-            print('CALL', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
-            return ACTION(action_table.CALL, int(amount_+to_call))
+        elif (action == 1) and (amount_ >= to_call):
+            print(self.name, 'action:', action, 'CALL', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
+            return ACTION(action_table.CALL, int(amount_))
 
         if to_call > 0:
-            print('FOLD', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
-            return ACTION(action_table.FOLD, int(amount_ + to_call))
-        print('CHECK', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
-        return ACTION(action_table.CHECK, int(amount_ + to_call))
+            print(self.name, 'action:', action, 'FOLD', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
+            return ACTION(action_table.FOLD, int(0))
+        print(self.name, 'action:', action, 'CHECK', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
+        return ACTION(action_table.CHECK, int(0))
         # elif action == 2:
         #     return ACTION(action_table.CHECK, int(amount_+to_call))
         # return ACTION(action_table.FOLD, int(amount_ + to_call))

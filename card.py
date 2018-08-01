@@ -71,10 +71,20 @@ def pooling(array, kernel, ptype='avg'):
 
 def array2features(array):
     two_three_four = pooling(array, kernel=(1, 4))  # 14 x 1
+    two_three_four = two_three_four + 0.1 * np.max(two_three_four)
+
     flush = pooling(pooling(array, kernel=(13, 1)), kernel=(2, 1), ptype='max')   # 1 x 4
+    flush = flush + 0.3 * np.max(flush)
+
     straight_flush = pooling(pooling(array, kernel=(5, 1)), kernel=(1, 4), ptype='max')  # 10 x 1
+    straight_flush = straight_flush + 0.5 * np.max(straight_flush)
+
     high = pooling(array, kernel=(1, 4), ptype='max')  # 14 x 1
+    high = high# + 0.1 * np.max(high)
+
     straight = pooling(pooling(array, kernel=(1, 4), ptype='max'), kernel=(5, 1))  # 10 x 1
+    straight = straight + 0.4 * np.max(straight)
+
     features = np.concatenate(tuple(map(lambda x: x.reshape(-1), (two_three_four,
                                                                   flush,
                                                                   straight_flush,
