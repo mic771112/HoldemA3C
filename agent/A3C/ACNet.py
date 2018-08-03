@@ -11,7 +11,8 @@ PLAYER_CACHES_INIT = collections.defaultdict(lambda: collections.Counter(PLAYER_
 
 class ACNet:
 
-    def __init__(self, mother, scope, sess, globalmodel=None, a_opt=None, c_opt=None, training=False):
+    def __init__(self, mother, scope, sess, globalmodel=None, con_a_opt=None, dis_a_opt=None, c_opt=None, training=False):
+
         # self.global_net = 'global_net'
         self.mother = mother
         self.sess = sess
@@ -25,34 +26,31 @@ class ACNet:
         self.game_count = 0
         self.ep_r = 0
 
-        self.con_weight = 0.05
-        self.gamma = 0.95
-        self.con_entropy_beta = 0.1
-        self.dis_entropy_beta = 0.03
+        self.con_weight = 0.001
+        self.gamma = 0.90
+        self.con_entropy_beta = 0.01
+        self.dis_entropy_beta = 0.05
         self.training = training
         self.globalmodel = globalmodel
 
-        self.buffer_s, self.buffer_action, self.buffer_amount, self.buffer_r, self.buffer_v = list(), list(), list(), list(), list()
+        self.buffer_s, self.buffer_action, self.buffer_amount, self.buffer_t, self.buffer_v = list(), list(), list(), list(), list()
         # self.state_cache, self.action_cache, self.amount_cache = None, None, None
         self.player_cache = PLAYER_CACHES_INIT.copy()
 
-        self.build_agent(scope=scope, a_opt=a_opt, c_opt=c_opt)
+        self.build_agent(scope=scope, con_a_opt=con_a_opt, dis_a_opt=dis_a_opt, c_opt=c_opt)
 
         self.round_start_stacks = None
 
-        if globalmodel is not None:
-            print(self.name, 'pulled')
-            self.pull_global()
+        # if globalmodel is not None:
+        #     print(self.name, 'pulled')
+        #     self.pull_global()
 
-    def build_agent(self, scope, a_opt, c_opt):
+    def build_agent(self, scope, con_a_opt, dis_a_opt, c_opt):
+
 
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
             # c_array, o_array, pt_vector = s  ## (14, 4, 3), (16 x n_opposite), (11)
 
-            self.global_step = tf.Variable(0, trainable=True)
-
-
-            # self.s = tf.placeholder(tf.float32, [None, self.state_size], 'S')
             self.c_array = tf.placeholder(tf.float32, [None, 14, 4, 3], 'c_array')
             self.o_array = tf.placeholder(tf.float32, [None, None, 16], 'o_array')
             self.pt_vector = tf.placeholder(tf.float32, [None, 11], 'pt_vector')
@@ -61,11 +59,12 @@ class ACNet:
             self.con_a_his = tf.placeholder(tf.float32, [None, self.con_action_space], 'Ac')
             self.v_target = tf.placeholder(tf.float32, [None, 1], 'Vtarget')
 
-            self.a_prob, self.mu, self.sigma, self.v, self.a_params, self.c_params = self._build_net(scope)
+            self.a_prob, self.mu, self.sigma, self.v, self.a_params, self.c_params, self.params = self._build_net(scope)
             # self.a_prob : [raise, call, check, fold]
-            self.mask = tf.cast(tf.equal(tf.argmax(self.a_prob), 2), tf.float32)  # con loss mask for non-raise
+            # self.mask = tf.cast(tf.equal(tf.argmax(self.a_prob), 2), tf.float32)  # con loss mask for non-raise
+            self.mask = tf.cast(tf.not_equal(tf.argmax(self.a_prob), 0), tf.float32)  # con loss mask for non-raise
 
-            normal_dist = tf.distributions.Normal(self.mu, self.sigma + 1e-5)
+            normal_dist = tf.distributions.Normal(self.mu**2, tf.abs(self.sigma))
 
             td = tf.subtract(self.v_target, self.v, name='TD_error')
             with tf.name_scope('c_loss'):
@@ -87,8 +86,7 @@ class ACNet:
                     self.con_entropy = normal_dist.entropy()  # encourage exploration
                     self.con_exp_v = self.con_entropy_beta * self.con_entropy + self.con_exp_v
                     self.con_a_loss = tf.reduce_mean(-self.con_exp_v)
-
-                self.a_loss = self.dis_a_loss + self.con_weight * self.mask * self.con_a_loss
+                    self.con_a_loss = self.con_weight * self.mask * self.con_a_loss
 
             with tf.name_scope('choose_amount'):  # use local params to choose action
 
@@ -97,8 +95,11 @@ class ACNet:
                                                self.con_action_bound[1])
 
             with tf.name_scope('local_grad'):
-                self.a_grads = tf.gradients(self.a_loss, self.a_params)
-                self.c_grads = tf.gradients(self.c_loss, self.c_params)
+                self.con_a_grads = tf.gradients(self.con_a_loss, self.params)
+                self.dis_a_grads = tf.gradients(self.dis_a_loss, self.params)
+                self.c_grads = tf.gradients(self.c_loss, self.params)
+                # self.a_grads = tf.gradients(self.a_loss, self.a_params)
+                # self.c_grads = tf.gradients(self.c_loss, self.c_params)
 
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
             if self.globalmodel is not None:
@@ -106,20 +107,29 @@ class ACNet:
                 with tf.name_scope('sync'):
 
                     with tf.name_scope('pull'):
-                        self.pull_a_params_op = [l_p.assign(g_p) for l_p, g_p in
-                                                 zip(self.a_params, self.globalmodel.a_params)]
-                        self.pull_c_params_op = [l_p.assign(g_p) for l_p, g_p in
-                                                 zip(self.c_params, self.globalmodel.c_params)]
+                        self.pull_params_op = [l_p.assign(g_p) for l_p, g_p in
+                                                 zip(self.params, self.globalmodel.params)]
+                        # self.pull_a_params_op = [l_p.assign(g_p) for l_p, g_p in
+                        #                          zip(self.a_params, self.globalmodel.a_params)]
+                        # self.pull_c_params_op = [l_p.assign(g_p) for l_p, g_p in
+                        #                          zip(self.c_params, self.globalmodel.c_params)]
 
                     with tf.name_scope('push'):
-                        self.update_a_op = a_opt.apply_gradients(zip(self.a_grads, self.globalmodel.a_params))
-                        self.update_c_op = c_opt.apply_gradients(zip(self.c_grads, self.globalmodel.c_params))
+                        self.update_con_a_op = con_a_opt.apply_gradients(zip(self.con_a_grads, self.globalmodel.params))
+                        self.update_dis_a_op = dis_a_opt.apply_gradients(zip(self.dis_a_grads, self.globalmodel.params))
+                        self.update_c_op = c_opt.apply_gradients(zip(self.c_grads, self.globalmodel.params))
+                        # self.update_a_op = a_opt.apply_gradients(zip(self.a_grads, self.globalmodel.a_params))
+                        # self.update_c_op = c_opt.apply_gradients(zip(self.c_grads, self.globalmodel.c_params))
 
     def update_global(self, feed_dict):  # run by a local
-        self.sess.run([self.update_a_op, self.update_c_op], feed_dict)  # local grads applies to global net
+        self.sess.run([self.update_con_a_op, self.update_dis_a_op, self.update_c_op], feed_dict)  # local grads applies to global net
 
     def pull_global(self):  # run by a local
-        self.sess.run([self.pull_a_params_op, self.pull_c_params_op])
+        self.sess.run(self.pull_params_op)
+        # print(self.sess.run(self.params))
+        # print('\n'*10)
+        # print(self.sess.run(self.globalmodel.params))
+        # self.sess.run([self.pull_a_params_op, self.pull_c_params_op])
 
     def choose_action(self, s):  # run by a local
         # c_array, o_array, pt_vector = s  ## (14, 4, 3), (n_opposite x 16), (11)
@@ -136,66 +146,92 @@ class ACNet:
         amount = float(amount[0])
         return action, amount
 
-
-    def _build_net(self, scope, layer_nodes=256, convergence_node=16):
+    def _build_net(self, scope, layer_nodes=256, convergence_node=32):
         # w_init = tf.random_normal_initializer(0, 0.1)
         w_init = tf.glorot_uniform_initializer()
         drop_prob = 0.1
 
-        self.state_vector = tf.placeholder(tf.float32, [None, 167], 's_vector')
-        self.state_array = tf.placeholder(tf.float32, [None, None, 16], 's_array')
-        self.state_round = tf.placeholder(tf.int32, [None], 'round')
+        with tf.variable_scope('ac'):
+            with tf.variable_scope('main'):
+                self.global_step = tf.Variable(0, trainable=False)
 
-        round_embeddings_for_concat = tf.get_variable('round_embeddings_for_concat', [6, 16])
-        embedded_round_for_concat = tf.gather(round_embeddings_for_concat, self.state_round)
+                self.state_vector = tf.placeholder(tf.float32, [None, 167], 's_vector')
+                self.state_array = tf.placeholder(tf.float32, [None, None, 16], 's_array')
+                self.state_round = tf.placeholder(tf.int32, [None], 'round')
 
-        round_embeddings = tf.get_variable('round_embeddings_for_add', [6, layer_nodes])
-        embedded_round = tf.gather(round_embeddings, self.state_round)
-        embedded_round1 = tf.layers.dense(embedded_round, layer_nodes, kernel_initializer=w_init)
-        embedded_round2 = tf.layers.dense(embedded_round, layer_nodes, kernel_initializer=w_init)
+                round_embeddings_for_concat = tf.Variable(tf.random_normal([6, 128], stddev=0.35), name="round_embeddings_for_concat")
+                embedded_round_for_concat = tf.gather(round_embeddings_for_concat, self.state_round)
 
-        cell_fw = tf.contrib.rnn.MultiRNNCell([tf.nn.rnn_cell.LSTMCell(i) for i in [32, 32]])
-        cell_bw = tf.contrib.rnn.MultiRNNCell([tf.nn.rnn_cell.LSTMCell(i) for i in [32, 32]])
-        outputs, states = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, self.state_array, dtype=tf.float32)
-        fw_vector = outputs[0][:, -1, :]
-        bw__vector = outputs[1][:, -1, :]
-        o_vector = tf.concat([fw_vector, bw__vector, self.state_vector, embedded_round_for_concat], -1)
+                round_embeddings = tf.Variable(tf.random_normal([6, layer_nodes], stddev=0.35), name="round_embeddings_for_add")
+                embedded_round = tf.gather(round_embeddings, self.state_round)
+                embedded_round1 = tf.layers.dense(embedded_round, layer_nodes, kernel_initializer=w_init)
+                embedded_round1 = tf.layers.dense(embedded_round1, layer_nodes, kernel_initializer=w_init)
+                embedded_round1 = tf.layers.dense(embedded_round1, layer_nodes, kernel_initializer=w_init)
+                embedded_round2 = tf.layers.dense(embedded_round, layer_nodes, kernel_initializer=w_init)
+                embedded_round2 = tf.layers.dense(embedded_round2, layer_nodes, kernel_initializer=w_init)
+                embedded_round2 = tf.layers.dense(embedded_round2, layer_nodes, kernel_initializer=w_init)
 
-        main_layer = tf.layers.dense(o_vector, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-        main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
-        main_layer = tf.layers.dense(o_vector, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-        main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
-        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + embedded_round1
-        main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
-        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init) + embedded_round2
-        main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
-        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-        main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
-        main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                cell_fw = tf.contrib.rnn.MultiRNNCell([tf.nn.rnn_cell.LSTMCell(i) for i in [32, 32]])
+                cell_bw = tf.contrib.rnn.MultiRNNCell([tf.nn.rnn_cell.LSTMCell(i) for i in [32, 32]])
+                outputs, states = tf.nn.bidirectional_dynamic_rnn(cell_fw, cell_bw, self.state_array, dtype=tf.float32)
+                fw_vector = outputs[0][:, -1, :]
+                bw__vector = outputs[1][:, -1, :]
+                o_vector = tf.concat([fw_vector, bw__vector, self.state_vector, embedded_round_for_concat], -1)
+                # o_vector = self.state_vector
+                main_layer = tf.layers.dense(o_vector, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                # main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                # main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                # main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                # main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                # main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                # main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                # main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                # main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                # main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                # main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                # main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                # main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                # main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                # main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                # main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                # main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                # main_layer = tf.layers.dropout(main_layer, rate=drop_prob)
+                # main_layer = tf.layers.dense(main_layer, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
 
+            with tf.variable_scope('actor'):
+                l_a = tf.layers.dropout(main_layer, rate=drop_prob)
+                l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                l_a_actions = tf.layers.dense(l_a, self.dis_action_space*convergence_node, tf.nn.relu6, kernel_initializer=w_init)
+                l_a_mu = tf.layers.dense(l_a, self.con_action_space*convergence_node, tf.nn.relu6, kernel_initializer=w_init)
+                l_a_sigma = tf.layers.dense(l_a, self.con_action_space*convergence_node, tf.nn.relu6, kernel_initializer=w_init)
+                actions = tf.layers.dense(l_a_actions, self.dis_action_space, tf.nn.softmax, kernel_initializer=w_init, name='actions')  # raise, call, check, fold
+                mu = tf.layers.dense(l_a_mu, self.con_action_space, kernel_initializer=w_init, name='mu')
+                sigma = tf.layers.dense(l_a_sigma, self.con_action_space, kernel_initializer=w_init, name='sigma')
 
+            with tf.variable_scope('critic'):
+                l_c = tf.layers.dropout(main_layer, rate=drop_prob)
+                l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                l_c = tf.layers.dense(l_c, convergence_node, tf.nn.relu6, kernel_initializer=w_init)
+                l_c = tf.layers.dense(l_c, convergence_node, tf.nn.relu6, kernel_initializer=w_init)
+                v = tf.layers.dense(l_c, 1, kernel_initializer=w_init, name='v')  # state value
 
-        with tf.variable_scope('actor'):
-            l_a = tf.layers.dropout(main_layer, rate=drop_prob)
-            l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-            l_a_actions = tf.layers.dense(l_a, self.dis_action_space*convergence_node, tf.nn.relu, kernel_initializer=w_init)
-            l_a_mu = tf.layers.dense(l_a, self.con_action_space*convergence_node, tf.nn.relu, kernel_initializer=w_init)
-            l_a_sigma = tf.layers.dense(l_a, self.con_action_space*convergence_node, tf.nn.relu, kernel_initializer=w_init)
-            actions = tf.layers.dense(l_a_actions, self.dis_action_space, tf.nn.softmax, kernel_initializer=w_init, name='actions')  # raise, call, check, fold
-            mu = tf.layers.dense(l_a_mu, self.con_action_space, tf.nn.relu, kernel_initializer=w_init, name='mu')
-            sigma = tf.layers.dense(l_a_sigma, self.con_action_space, tf.nn.relu, kernel_initializer=w_init, name='sigma')
-
-        with tf.variable_scope('critic'):
-            l_c = tf.layers.dropout(main_layer, rate=drop_prob)
-            l_c = tf.layers.dense(l_c, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
-            l_c = tf.layers.dense(main_layer, convergence_node, tf.nn.relu, kernel_initializer=w_init)
-            l_c = tf.layers.dense(l_c, convergence_node, tf.nn.relu, kernel_initializer=w_init)
-            v = tf.layers.dense(l_c, 1, kernel_initializer=w_init, name='v')  # state value
-
-        a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope + '/actor')
-        c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope + '/critic')
-
-        return actions, mu, sigma, v, a_params, c_params
+        params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope + '/ac')
+        main_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope + '/ac/main')
+        a_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope + '/ac/actor')
+        c_params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=scope + '/ac/critic')
+        return actions, mu, sigma, v, a_params, c_params, params
 
     def getReload(self, state):
         # print('we got asking for reloading')
@@ -212,27 +248,36 @@ class ACNet:
         # print('new_round')
 
     def round_end(self, state, playerid):
+        sb = state[1].smallblind
+
         stacks = [i.stack for i in state.player_states]
-        rewards = [i - j for i, j in zip(stacks, self.round_start_stacks)]
+        n_players = len(list(filter(lambda x: x > 0, stacks)))
+        n_players = n_players if n_players else 1
+        turn_reward = {0: 0, 1: 2, 2: 2, 3: 1.5, 4: 1.7, 5: 1.9}
+        rewards = [i - j - (3 * sb / n_players) for i, j in zip(stacks, self.round_start_stacks)]
 
         self.game_round += 1
         self.ep_r += rewards[playerid]
 
-
         for s, pr in enumerate(rewards):
             self.player_cache[s].update({'winned': 0 if not pr else (pr / abs(pr))})
 
-        if self.buffer_r:  # for non action round, ex: as play as bb while all others fold
-            print('{} ---> round r: {} <---'.format(self.name, rewards[playerid]), end=' ')
-            rewards = [i/1000 if (i >= (-2 * state[1].smallblind)) else i/300 for i in rewards]  # reward warpping
-            r = rewards[playerid]
-            # r = rewards[playerid] / 1000
+        if self.buffer_t:  # for non action round, ex: as play as bb while all others fold
+            turn = self.buffer_t[-1]  # len(list(filter(lambda x: x > 0, state[2])))
+            print(self.name, 'turn', turn)
+
+            print('{} ---> round turn: {}\tr: {} <---'.format(self.name, turn, rewards[playerid]), end=' ')
+            # rewards = [i + (turn_reward[turn] * sb) for i in rewards]  # reward warpping
+            # rewards = [i/1000 if (i >= 0) else i/1000 for i in rewards]  # reward warpping
+            # r = rewards[playerid]
+            r = rewards[playerid] / 1000
             print('warpped: {}'.format(r))
-            self.buffer_r[-1] = r  # (r / (abs(r)+1)) * (r ** 2)
-            buffer_v_target = self._get_v(self.buffer_r, gamma=self.gamma)
+            buffer_r = [0] * len(self.buffer_t)
+            buffer_r[-1] = r  # (r / (abs(r)+1)) * (r ** 2)
+            buffer_v_target = self._get_v(buffer_r, gamma=self.gamma)
 
             # print(self.name, 'buffer_v_target', buffer_v_target)
-            # print(self.name, 'buffer_r', self.buffer_r)
+            # print(self.name, 'buffer_r', self.buffer_t)
 
             self.buffer_v.extend(buffer_v_target)
             self.init_r()
@@ -242,11 +287,6 @@ class ACNet:
         # print('round_end')
 
     def learning(self):
-        # print(self.name, 'self.buffer_v', self.buffer_v)
-        # print(self.name, 'self.buffer_action', self.buffer_action)
-        # print(self.name, 'self.buffer_amount', self.buffer_amount)
-        # print(self.name, self.buffer_s)
-
 
         state_vector, state_array, state_round = zip(*self.buffer_s)
         state_vector = np.array(state_vector)
@@ -288,7 +328,7 @@ class ACNet:
         self.mother.global_ep += 1
         global_ep = self.mother.global_ep
         self.game_count += 1
-        if not global_ep % self.mother.update_global_iter:
+        if not self.game_count % self.mother.update_iter:
             if self.training:
                 if self.buffer_s:
                     self.learning()
@@ -319,6 +359,10 @@ class ACNet:
 
         to_call = state[1].to_call
         # to_call = state[1].call_price
+
+        # print('state[1].call_price', state[1].call_price)
+        # print('state[1].to_call', state[1].to_call)
+
         featurearrays = self.state2featurearrays(state, playerseat=playerid) #
         action, amount = self.choose_action(featurearrays)
         amount_ = int(amount * 1000)
@@ -328,23 +372,26 @@ class ACNet:
         action2action = {i: a for i, a in enumerate(['bet', 'call', 'check', 'fold'])}
 
         # self.state_cache, self.action_cache, self.amount_cache = feature, action, amount
-        self.update_buffer(0, featurearrays, action, amount)  # temp reward
-
+        self.update_buffer(len(publics), featurearrays, action, amount)  # temp reward
         chips = 0
         for i in state[0]:
             if i.seat == playerid:
                 chips = i.stack
 
         if action == 0:
-            if chips < to_call or amount_ <= to_call:
+            if chips < to_call:
+            # if (chips < to_call) or (amount_ < to_call):
                 print(self.name, 'action:', action, 'CALL', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
-                return ACTION(action_table.CALL, int(amount_))
+                return ACTION(action_table.CALL, int(amount_ + to_call))
+                # return ACTION(action_table.CALL, int(amount_))
             print(self.name, 'action:', action, 'RAISE', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
-            return ACTION(action_table.RAISE, int(amount_))
+            return ACTION(action_table.RAISE, int(amount_ + to_call))
+            # return ACTION(action_table.RAISE, int(amount_))
 
-        elif (action == 1) and (amount_ >= to_call):
+        elif action == 1:
+        # elif (action == 1) and (amount_ >= to_call):
             print(self.name, 'action:', action, 'CALL', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
-            return ACTION(action_table.CALL, int(amount_))
+            return ACTION(action_table.CALL, int(to_call))
 
         if to_call > 0:
             print(self.name, 'action:', action, 'FOLD', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
@@ -509,10 +556,10 @@ class ACNet:
         self.buffer_s, self.buffer_action, self.buffer_amount, self.buffer_v = list(), list(), list(), list()
 
     def init_r(self):
-        self.buffer_r = list()
+        self.buffer_t = list()
 
     def update_buffer(self, r, feature, action, amount):
         self.buffer_s.append(feature)
-        self.buffer_r.append(r)
+        self.buffer_t.append(r)
         self.buffer_action.append(action)
         self.buffer_amount.append(amount)

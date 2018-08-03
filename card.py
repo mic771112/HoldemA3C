@@ -11,7 +11,7 @@ CARD2INDEX = {c: i for i, c in ALL_CARDS.items()}
 ALL_DEUCES = {i + 13*j: Card.new(v+w) for i, v in enumerate('A23456789TJQK') for j, w in enumerate('shdc')}
 CARD2DEUCES = {c: ALL_DEUCES.get(i) for i, c in ALL_CARDS.items()}
 DEUCES2CARD = {v: k for k, v in CARD2DEUCES.items()}
-
+DEUCES2INDEX = {c: i for i, c in ALL_DEUCES.items()}
 
 def cards2deuces(cards):
     return list(map(CARD2DEUCES.get, cards))
@@ -71,19 +71,16 @@ def pooling(array, kernel, ptype='avg'):
 
 def array2features(array):
     two_three_four = pooling(array, kernel=(1, 4))  # 14 x 1
-    two_three_four = two_three_four + 0.1 * np.max(two_three_four)
-
     flush = pooling(pooling(array, kernel=(13, 1)), kernel=(2, 1), ptype='max')   # 1 x 4
-    flush = flush + 0.3 * np.max(flush)
-
     straight_flush = pooling(pooling(array, kernel=(5, 1)), kernel=(1, 4), ptype='max')  # 10 x 1
-    straight_flush = straight_flush + 0.5 * np.max(straight_flush)
-
     high = pooling(array, kernel=(1, 4), ptype='max')  # 14 x 1
-    high = high# + 0.1 * np.max(high)
-
     straight = pooling(pooling(array, kernel=(1, 4), ptype='max'), kernel=(5, 1))  # 10 x 1
-    straight = straight + 0.4 * np.max(straight)
+
+    # two_three_four = two_three_four + 0.1 * np.max(two_three_four)
+    # flush = flush + 0.3 * np.max(flush)
+    # straight_flush = straight_flush + 0.5 * np.max(straight_flush)
+    # high = high# + 0.1 * np.max(high)
+    # straight = straight + 0.4 * np.max(straight)
 
     features = np.concatenate(tuple(map(lambda x: x.reshape(-1), (two_three_four,
                                                                   flush,
@@ -103,6 +100,12 @@ def deuces2features(deuces):
 
 def deuces2array(deuces):
     return cards2array(deuces2cards(deuces))
+
+def deuces2onehot(deuces):
+    onehot = [0] * 52
+    for d in deuces:
+        onehot[DEUCES2INDEX[d]] = 1
+    return onehot
 
 if __name__ == "__main__":
     assert sorted(ALL_DEUCES.keys()) == list(range(52))

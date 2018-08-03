@@ -358,6 +358,7 @@ class TexasHoldemEnv(Env, utils.EzPickle):
     def _resolve_sidepots(self, players_playing):
         players = [p for p in players_playing if p.currentbet]
         if self._debug:
+            print('[DEBUG] seats: ', [p._seat for p in players])
             print('[DEBUG] current bets: ', [p.currentbet for p in players])
             print('[DEBUG] playing hand: ', [p.playing_hand for p in players])
         if not players:
