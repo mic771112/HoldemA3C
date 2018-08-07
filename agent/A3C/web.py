@@ -9,9 +9,6 @@ import numpy as np
 server = 'ws://poker-training.vtr.trendnet.org:3001/'
 player = "mamamia"
 
-# player = '1886368b064b4b76be10d54d38958ce3'  # updated @ 20180719
-# server = 'ws://poker-battle.vtr.trendnet.org:3001'
-
 # model = agent.allinModel()
 model = agent.A3CAgent(model_dir='C:/Users/shanger_lin/Desktop/models/A3CAgent/model51', learning=False, hiring=False)
 
