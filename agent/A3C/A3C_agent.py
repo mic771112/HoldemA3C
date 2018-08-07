@@ -268,11 +268,11 @@ if __name__ == '__main__':
     uris = ['ws://poker-battle.vtr.trendnet.org:3001'] + \
            ['ws://poker-training.vtr.trendnet.org:3001/'] * len(range(1, 19)) * 4
 
-    names = ['xxxx'] +\
-            ['xxxxx{}'.format(str(i)) for i in range(1, 19)] + \
-            ['xxxxxx{}'.format(str(i)) for i in range(1, 19)] + \
-            ['xxxxxxx{}'.format(str(i)) for i in range(1, 19)] + \
-            ['xxxxxxx{}'.format(str(i)) for i in range(1, 19)]
+    names = ['1886368b064b4b76be10d54d38958ce3'] +\
+            ['omg{}'.format(str(i)) for i in range(1, 19)] + \
+            ['omgt{}'.format(str(i)) for i in range(1, 19)] + \
+            ['omgg{}'.format(str(i)) for i in range(1, 19)] + \
+            ['omggy{}'.format(str(i)) for i in range(1, 19)]
 
     assert len(uris) == len(names)
     model_dir = 'C:/Users/shanger_lin/Desktop/models/A3CAgent/model91'
