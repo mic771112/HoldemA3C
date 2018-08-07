@@ -266,13 +266,12 @@ if __name__ == '__main__':
     #           ] + simple_o_list
 
     uris = ['ws://poker-battle.vtr.trendnet.org:3001'] + \
-           ['ws://poker-training.vtr.trendnet.org:3001/'] * len(range(1, 19)) * 4
+           ['ws://poker-training.vtr.trendnet.org:3001/'] * len(range(1, 19)) * 3
 
     names = ['1886368b064b4b76be10d54d38958ce3'] +\
             ['omg{}'.format(str(i)) for i in range(1, 19)] + \
             ['omgt{}'.format(str(i)) for i in range(1, 19)] + \
-            ['omgg{}'.format(str(i)) for i in range(1, 19)] + \
-            ['omggy{}'.format(str(i)) for i in range(1, 19)]
+            ['omgg{}'.format(str(i)) for i in range(1, 19)]
 
     assert len(uris) == len(names)
     model_dir = 'C:/Users/shanger_lin/Desktop/models/A3CAgent/model91'

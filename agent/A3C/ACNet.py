@@ -308,7 +308,6 @@ class ACNet:
         self.ep_r = 0
 
     def game_over(self, state, playerid):
-        print('game_over', 'game_over')
 
         try:
             self.mother.global_ep += 1
@@ -327,10 +326,6 @@ class ACNet:
             print('global_ep', global_ep, '/', self.mother.dump_global_iter)
         except Exception as e:
             print(e)
-            print(e)
-            print(e)
-            print(e)
-
 
 
         self.mother.global_running_r.append(self.ep_r)
