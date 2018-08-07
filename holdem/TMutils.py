@@ -215,7 +215,7 @@ class ClientPlayer():
         self._tocall = max(self._tocall, total_bet)
         if self._tocall > 0:
             self._tocall = max(self._tocall, self._bigblind)
-        self._lastraise = max(self._lastraise, total_bet  - self._lastraise)
+        self._lastraise = max(self._lastraise, total_bet - self._lastraise)
 
     def _update_player_info(self, players):
 
@@ -627,6 +627,10 @@ class ClientPlayer():
             return False
 
         elif msg == "__game_stop":
+            if self._debug:
+                print("[DEBUG] {} {} ". format(msg, data))
+            my_seat = self.__getPlayerSeatByName(self._name)
+            self._model.game_over(self.get_current_state(), my_seat)
             return False
 
         else:

@@ -76,11 +76,11 @@ def array2features(array):
     high = pooling(array, kernel=(1, 4), ptype='max')  # 14 x 1
     straight = pooling(pooling(array, kernel=(1, 4), ptype='max'), kernel=(5, 1))  # 10 x 1
 
-    # two_three_four = two_three_four + 0.1 * np.max(two_three_four)
-    # flush = flush + 0.3 * np.max(flush)
-    # straight_flush = straight_flush + 0.5 * np.max(straight_flush)
-    # high = high# + 0.1 * np.max(high)
-    # straight = straight + 0.4 * np.max(straight)
+    two_three_four = two_three_four + 0.1 * np.max(two_three_four)
+    flush = flush + 0.2 * np.max(flush)
+    straight_flush = straight_flush + 0.5 * np.max(straight_flush)
+    high = high# + 0.1 * np.max(high)
+    straight = straight + 0.4 * np.max(straight)
 
     features = np.concatenate(tuple(map(lambda x: x.reshape(-1), (two_three_four,
                                                                   flush,

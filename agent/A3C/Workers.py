@@ -7,6 +7,7 @@ from random import shuffle
 from ACNet import ACNet, PLAYER_CACHES_INIT
 import json
 import card
+import datetime
 
 class Worker:
     def __init__(self, mother, name, sess, globalmodel, con_a_opt, dis_a_opt, c_opt, learning=True):
@@ -27,20 +28,42 @@ class Worker:
     def webwork(self, opposite_agents, max_global_ep, update_iter, gamma, dump_global_iter, name, uri='ws://poker-training.vtr.trendnet.org:3001/', oppositenum=9):
 
         self.mother.final_dumped = False
-        # time.sleep(np.random.randint(100))
+        if 'battle' not in uri:
+            init_sleep = np.random.randint(100)
+            print('{}\t{}: good day, sir! but let me sleep {}sec more...'.format(self.name, name, init_sleep))
+            time.sleep(init_sleep)
         local_game_count = 0
-        local_round_count = 0
-
+        last_game = datetime.datetime.now()
         while not self.mother.coord.should_stop() and self.mother.global_ep < max_global_ep:  # single move in this loop is a game == a episode
-            # time.sleep(np.random.randint(5, 20))
-            local_game_count += 1
+            if 'battle' not in uri:
+                game_sleep = np.random.randint(1, 30)
+                print('{}\t{}: I am ready, sir! but let me prepare {}sec more...'.format(self.name, name, game_sleep))
+                time.sleep(game_sleep)
+
             # name = 'omg' + str((int(str(self.name)[-1])+self.mother.web_shift) % 16)
             try:
-                print('connect to {} as {}'.format(uri, name))
+                print('{}\tconnect to {} as {}'.format(self.name, uri, name))
                 client_player = holdem.ClientPlayer(uri, name, self.AC, debug=False, playing_live=False)
                 client_player.doListen()
+
+                if ('battle' in uri) and ((datetime.datetime.now()-last_game).total_seconds()<10):
+                    sec = 100
+                    print('{}\t{} is sleeping for {} secs at {}....'.format(self.name, name, sec, uri))
+                    time.sleep(sec)
+                    last_game = datetime.datetime.now()
+                    continue
+
+                local_game_count += 1
             except:
-                time.sleep(60)
+                local_game_count -= 1
+                if 'battle' not in uri:
+                    sec = 10
+                    print('{}\t{} is sleeping for {} secs at {}....'.format(self.name, name, sec, uri))
+                    time.sleep(sec)
+                else:
+                    sec = 3
+                    print('{}\t{} is sleeping for {} secs at {}....'.format(self.name, name, sec, uri))
+                    time.sleep(sec)
 
     @staticmethod
     def check_repeat_round_card(state):
@@ -100,7 +123,7 @@ class Worker:
 
                     geterror = self.check_repeat_round_card(state)
                     if geterror:
-                        print('====> repeat_round_card!')
+                        print(self.name, '====> repeat_round_card!')
                         break
 
 
@@ -137,24 +160,11 @@ class Worker:
 
     @staticmethod
     def _get_stack(state):
-        # print(state.community_state.button)
-        # print([i.stack + i.betting for i in state.player_states])
-        # print(sum([i.stack + i.betting for i in state.player_states]) + state.community_state.bigblind + state.community_state.smallblind)
         return [i.stack for i in state.player_states]
 
-    # @staticmethod
-    # def _get_v(buffer_r, gamma=0.99):
-    #     v_s_ = 0
-    #     buffer_v_target = list()
-    #     for r in buffer_r[::-1]:  # reverse buffer r
-    #         v_s_ = r + gamma * v_s_
-    #         buffer_v_target.append(v_s_)
-    #     buffer_v_target.reverse()
-    #     return buffer_v_target
-
-    def get_round_reward(self, next_stack):
-        rewards = [i - j for i, j in zip(next_stack, self.round_start_stack)]
-        return rewards
+    # def get_round_reward(self, next_stack):
+    #     rewards = [i - j for i, j in zip(next_stack, self.round_start_stack)]
+    #     return rewards
 
     def update_round_start_stack(self, next_stack):
         self.round_start_stack = next_stack
@@ -163,44 +173,44 @@ class Worker:
     def _get_learnable_agent(model_list):
         return {i: model for i, model in enumerate(model_list) if hasattr(model, 'update_buffer')}
 
-    def update_player_winning_cache(self, rewards):
-        learnableagents = self._get_learnable_agent(self.model_list)
-        for seat, agent in learnableagents.items():
-            for s, pr in enumerate(rewards):
-                agent.player_cache[s].update({'winned': 0 if not pr else (pr/abs(pr))})
+    # def update_player_winning_cache(self, rewards):
+    #     learnableagents = self._get_learnable_agent(self.model_list)
+    #     for seat, agent in learnableagents.items():
+    #         for s, pr in enumerate(rewards):
+    #             agent.player_cache[s].update({'winned': 0 if not pr else (pr/abs(pr))})
 
-    def init_agent_player_cache(self):
-        learnableagents = self._get_learnable_agent(self.model_list)
-        for seat, agent in learnableagents.items():
-            agent.player_cache = PLAYER_CACHES_INIT.copy()
+    # def init_agent_player_cache(self):
+    #     learnableagents = self._get_learnable_agent(self.model_list)
+    #     for seat, agent in learnableagents.items():
+    #         agent.player_cache = PLAYER_CACHES_INIT.copy()
 
-    def agents_learning(self):
-        # print('learning')
-        learnableagents = self._get_learnable_agent(self.model_list)
-        for seat, agent in learnableagents.items():
-            if agent.buffer_s:
-                buffer_s = np.array(agent.buffer_s)
-                buffer_action = np.array(agent.buffer_action)
-                buffer_amount = np.array(agent.buffer_amount)
-                buffer_v = np.array(agent.buffer_v)
+    # def agents_learning(self):
+    #     # print('learning')
+    #     learnableagents = self._get_learnable_agent(self.model_list)
+    #     for seat, agent in learnableagents.items():
+    #         if agent.buffer_s:
+    #             buffer_s = np.array(agent.buffer_s)
+    #             buffer_action = np.array(agent.buffer_action)
+    #             buffer_amount = np.array(agent.buffer_amount)
+    #             buffer_v = np.array(agent.buffer_v)
+    #
+    #             feed_dict = {
+    #                 agent.s: buffer_s,
+    #                 agent.dis_a_his: buffer_action,
+    #                 agent.con_a_his: buffer_amount,
+    #                 agent.v_target: buffer_v,
+    #             }
+    #
+    #             agent.update_global(feed_dict)
+    #             agent.pull_global()
+    #             agent.init_learning_buffer()
 
-                feed_dict = {
-                    agent.s: buffer_s,
-                    agent.dis_a_his: buffer_action,
-                    agent.con_a_his: buffer_amount,
-                    agent.v_target: buffer_v,
-                }
 
-                agent.update_global(feed_dict)
-                agent.pull_global()
-                agent.init_learning_buffer()
-
-
-    def agents_pull(self):
-        # print('learning')
-        learnableagents = self._get_learnable_agent(self.model_list)
-        for seat, agent in learnableagents.items():
-            agent.pull_global()
+    # def agents_pull(self):
+    #     # print('learning')
+    #     learnableagents = self._get_learnable_agent(self.model_list)
+    #     for seat, agent in learnableagents.items():
+    #         agent.pull_global()
 
     def env_init(self, opposite_agents, oppositenum):
 
@@ -217,24 +227,4 @@ class Worker:
             self.env.add_player(i, stack=3000)
         self.round_start_stack = self._get_stack(self.env.reset())
 
-    # def init_agent_cache(self):
-    #     learnableagents = self._get_learnable_agent(self.model_list)
-    #     for seat, agent in learnableagents.items():
-    #         agent.init_cache()
-
-    # def update_v_buffer(self, gamma=0.99):
-    #     learnableagents = self._get_learnable_agent(self.model_list)
-    #     for seat, agent in learnableagents.items():
-    #         if not agent.buffer_r:  # for non action round, ex: as play as bb while all others fold
-    #             continue
-    #         buffer_v_target = self._get_v(agent.buffer_r, gamma=gamma)
-    #         agent.buffer_v.extend(buffer_v_target)
-    #         agent.init_r()
-
-    # def reward_correction(self, rewards):
-    #     learnableagents = self._get_learnable_agent(self.model_list)
-    #     for seat, agent in learnableagents.items():
-    #         if not agent.buffer_r:  # for non action round, ex: as play as bb while all others fold
-    #             continue
-    #         agent.buffer_r[-1] = rewards[seat]
 
