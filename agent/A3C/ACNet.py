@@ -20,16 +20,16 @@ class ACNet:
         # self.state_size = 259
         self.dis_action_space = 2
         self.con_action_space = 1
-        self.con_action_bound = [10, 10000]
+        self.con_action_bound = [10, 30000]
 
         self.game_round = 0
         self.game_count = 0
         self.ep_r = 0
 
         self.con_weight = 1
-        self.gamma = 0.90
-        self.con_entropy_beta = 1e0
-        self.dis_entropy_beta = 1e2
+        self.gamma = 0.8
+        self.con_entropy_beta = 3e-2
+        self.dis_entropy_beta = 1e1
         self.training = training
         self.globalmodel = globalmodel
 
@@ -41,10 +41,6 @@ class ACNet:
 
         self.round_start_stacks = None
 
-        # if globalmodel is not None:
-        #     print(self.name, 'pulled')
-        #     self.pull_global()
-
     @staticmethod
     def nan_filtering(grads, variables):
         return [(g, v) for g, v in zip(grads, variables) if g is not None]
@@ -53,14 +49,9 @@ class ACNet:
 
 
         with tf.variable_scope(scope, reuse=tf.AUTO_REUSE):
-            # c_array, o_array, pt_vector = s  ## (14, 4, 3), (16 x n_opposite), (11)
 
-            # self.c_array = tf.placeholder(tf.float32, [None, 14, 4, 3], 'c_array')
-            # self.o_array = tf.placeholder(tf.float32, [None, None, 68], 'o_array')
-            # self.pt_vector = tf.placeholder(tf.float32, [None, 11], 'pt_vector')
-
-            self.state_vector = tf.placeholder(tf.float32, [None, 992], 's_vector')
-            self.state_array = tf.placeholder(tf.float32, [None, None, 81], 's_array')
+            self.state_vector = tf.placeholder(tf.float32, [None, 1028], 's_vector')
+            self.state_array = tf.placeholder(tf.float32, [None, None, 93], 's_array')
             self.state_round = tf.placeholder(tf.int32, [None], 'round')
 
             self.dis_a_his = tf.placeholder(tf.int32, [None, 1], 'Ad')
@@ -72,7 +63,7 @@ class ACNet:
 
             # self.a_prob : [raise, call, check/fold]
             # self.mask = tf.cast(tf.equal(tf.argmax(self.a_prob), 0), tf.float32)  # 0raise:1, else: 0
-            normal_dist = tf.distributions.Normal(self.mu, tf.abs(self.sigma))
+            normal_dist = tf.distributions.Normal(self.mu, self.sigma)
 
             td = tf.subtract(self.v_target, self.v, name='TD_error')
             with tf.name_scope('c_loss'):
@@ -97,8 +88,8 @@ class ACNet:
                     self.con_a_loss = self.mask * self.con_a_loss
 
             with tf.name_scope('choose_amount'):  # use local params to choose action
-                value = tf.squeeze(normal_dist.sample(1), axis=[0, 1])
-                self.amount = tf.clip_by_value(value**3+1000,
+                value = tf.squeeze(tf.reduce_mean(normal_dist.sample(1), 0), -1)
+                self.amount = tf.clip_by_value(value,
                                                self.con_action_bound[0],
                                                self.con_action_bound[1])
 
@@ -134,10 +125,6 @@ class ACNet:
 
     def pull_global(self):  # run by a local
         self.sess.run(self.pull_params_op)
-        # print(self.sess.run(self.params))
-        # print('\n'*10)
-        # print(self.sess.run(self.globalmodel.params))
-        # self.sess.run([self.pull_a_params_op, self.pull_c_params_op])
 
     def choose_action(self, s):  # run by a local
         # c_array, o_array, pt_vector = s  ## (14, 4, 3), (n_opposite x 16), (11)
@@ -194,11 +181,19 @@ class ACNet:
                 l_a = tf.layers.dropout(main_layer, rate=drop_prob)
                 l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
                 l_a_actions = tf.layers.dense(l_a, self.dis_action_space*convergence_node, tf.nn.relu6, kernel_initializer=w_init)
+                actions = tf.layers.dense(l_a_actions, self.dis_action_space, tf.nn.softmax, kernel_initializer=w_init, name='actions')  # raise, call, check, fold
+
+                l_a = tf.concat([l_a, tf.stop_gradient(actions), tf.stop_gradient(tf.contrib.seq2seq.hardmax(actions))], -1)
+                l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                l_a = tf.layers.dropout(l_a, rate=drop_prob)
+                l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+                l_a = tf.layers.dropout(l_a, rate=drop_prob)
+                l_a = tf.layers.dense(l_a, layer_nodes, tf.nn.relu6, kernel_initializer=w_init)
+
                 l_a_mu = tf.layers.dense(l_a, self.con_action_space*convergence_node, tf.nn.relu6, kernel_initializer=w_init)
                 l_a_sigma = tf.layers.dense(l_a, self.con_action_space*convergence_node, tf.nn.relu6, kernel_initializer=w_init)
-                actions = tf.layers.dense(l_a_actions, self.dis_action_space, tf.nn.softmax, kernel_initializer=w_init, name='actions')  # raise, call, check, fold
-                mu = tf.layers.dense(l_a_mu, self.con_action_space, kernel_initializer=w_init, name='mu')
-                sigma = tf.layers.dense(l_a_sigma, self.con_action_space, kernel_initializer=w_init, name='sigma')
+                mu = tf.layers.dense(l_a_mu, self.con_action_space, tf.nn.relu, kernel_initializer=w_init, name='mu', bias_initializer=tf.constant_initializer(0))
+                sigma = tf.layers.dense(l_a_sigma, self.con_action_space, tf.nn.relu, kernel_initializer=w_init, name='sigma', bias_initializer=tf.constant_initializer(1000))
 
             with tf.variable_scope('critic'):
                 l_c = tf.layers.dropout(main_layer, rate=drop_prob)
@@ -238,7 +233,7 @@ class ACNet:
 
         self.game_round += 1
         self.ep_r += rewards[playerid]
-
+        self.mother.global_running_round_r.append(rewards[playerid])
         for s, pr in enumerate(rewards):
             self.player_cache[s].update({'winned': 0 if ((not pr) or (pr<=0)) else 1})
 
@@ -276,7 +271,7 @@ class ACNet:
         state_vector, state_array, state_round = zip(*self.buffer_s)
         state_vector = np.array(state_vector)
         max_opposite = max([i.shape[0] for i in state_array])
-        state_array = np.array([np.vstack([i, [[0] * 81] * (max_opposite - i.shape[0])])
+        state_array = np.array([np.vstack([i, [[0] * 93] * (max_opposite - i.shape[0])])
                                 if (max_opposite - i.shape[0]) else i for i in state_array])
         state_round = np.array(state_round)
         buffer_action = np.vstack(self.buffer_action)
@@ -327,15 +322,16 @@ class ACNet:
         except Exception as e:
             print(e)
 
-
         self.mother.global_running_r.append(self.ep_r)
+        self.mother.global_running_round_r = self.mother.global_running_round_r[-1000:]
         self.mother.global_running_r = self.mother.global_running_r[-1000:]
-        print('{} =======>\tEp:{}| GameRound:{} | Ep_r:{}| Ep_r_avg:{} <========'.format(
+        print('{} =======>\tEp:{}| GameRound:{} | Ep_r:{}| Ep_r_avg:{} | R_r_avg: {} <========'.format(
             self.name,
             global_ep,
             self.game_round,
             self.ep_r,
-            np.mean(self.mother.global_running_r)))
+            np.mean(self.mother.global_running_r),
+            np.mean(self.mother.global_running_round_r)))
         self.ep_r = 0
         self.game_round = 0
         # print(self.player_cache)
@@ -345,16 +341,13 @@ class ACNet:
 
     def takeAction(self, state, playerid):
 
-        to_call = state[1].to_call
-        # to_call = state[1].call_price
-
-        # print('state[1].call_price', state[1].call_price)
-        # print('state[1].to_call', state[1].to_call)
+        to_call = int(state[1].to_call)
+        sb = int(state[1].smallblind)
 
         featurearrays = self.state2featurearrays(state, playerseat=playerid) #
         action, amount = self.choose_action(featurearrays)
 
-        amount_ = int(amount)  #  * 1000
+        amount_ = int(amount)
 
         hands = [i for i in state.player_states[playerid].hand if i != -1]
         publics = [i for i in state.community_card if i != -1]
@@ -367,15 +360,7 @@ class ACNet:
             if i.seat == playerid:
                 chips = i.stack
 
-        # if action == 0:
-            # # if chips < to_call:
-            # if (chips < to_call) or (amount_ < to_call):
-            #     print(self.name, 'action:', action, 'CALL', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
-            #     # return ACTION(action_table.CALL, int(amount_ + to_call))
-            #     return ACTION(action_table.CALL, int(amount_))
-            # print(self.name, 'action:', action, 'RAISE', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
-            # # return ACTION(action_table.RAISE, int(amount_ + to_call))
-            # return ACTION(action_table.RAISE, int(amount_))
+        to_call = min(to_call, chips)
 
         if (action == 0) and (amount_ >= to_call) and (chips >= to_call):
             print(self.name, 'chips', chips, 'action:', action, 'RAISE', amount_, to_call, card.deuces2cards(hands), card.deuces2cards(publics))
@@ -429,14 +414,14 @@ class ACNet:
         o_vector = list()
         p_vector = None
         hands = None
-
+        sb = state[1].smallblind
         for p in state[0]:
             if p.seat == playerseat:
                 hands = p.hand
                 p_state_vector = np.array([p.isallin, p.playedthisround]) # 2
-                p_count_vector = np.array([p.betting / 1000, p.stack / 1000, p.betting / (p.stack + 100)]) # 3
+                p_count_vector = np.array([p.betting /1000, p.stack/1000, p.betting / (p.stack + 100), p.betting /sb, p.stack/sb]) # 5
 
-                p_vector = np.concatenate([p_state_vector, self.np_numerical_transform(p_count_vector)])  # 2 + 3*6 = 20
+                p_vector = np.concatenate([p_state_vector, self.np_numerical_transform(p_count_vector)])  # 2 + 5*6 = 32
                 continue
 
             self.player_cache[p.seat].update({'isallin': int(p.isallin > 0),
@@ -453,6 +438,8 @@ class ACNet:
             p_cache = self.player_cache[p.seat]
             o_counts = [max(0, p.betting+1) / 1000,
                         max(0, p.stack+1) / 1000,
+                        max(0, p.betting + 1) / sb,
+                        max(0, p.stack + 1) / sb,
                         max(0, p.betting+1) / max(1, p.stack+1),
                         p_cache['isallin']+1 / p_cache['count'],
                         p_cache['betting'] / p_cache['count'],
@@ -463,16 +450,16 @@ class ACNet:
                         p_cache['winned'] / p_cache['playing_hand'],
                         p_cache['winned'] / p_cache['isallin'],
                         p_cache['winned'] / p_cache['betting'],
-                        p_cache['winned'] / p_cache['playing_hand']]  # 13
+                        p_cache['winned'] / p_cache['playing_hand']]  # 15
 
-            o_vector.append(np.concatenate([o_state, self.numerical_transform(o_counts)])) # 3 + 13*6 = 81
+            o_vector.append(np.concatenate([o_state, self.numerical_transform(o_counts)])) # 3 + 15*6 = 93
         if not o_vector:
-            o_vector.append([0] * 81)
-        state_array = np.array(o_vector)  # n_opposite x 81
+            o_vector.append([0] * 93)
+        state_array = np.array(o_vector)  # n_opposite x 93
 
         if p_vector is None:
-            p_vector = [0] * 20
-            p_vector = np.array(p_vector)  # 20
+            p_vector = [0] * 32
+            p_vector = np.array(p_vector)  # 32
 
         table = state[1]
 
@@ -481,11 +468,15 @@ class ACNet:
                           table.lastraise / 1000,
                           table.call_price / 1000,
                           table.to_call / 1000,
-                          state_array.shape[0] / 10]  # 6
+                          table.totalpot / sb,
+                          table.lastraise / sb,
+                          table.call_price / sb,
+                          table.to_call / sb,
+                          state_array.shape[0] / 10]  # 10
 
-        t_vector = self.np_numerical_transform(t_count_vector)  # 6 * 6 = 36
+        t_vector = self.np_numerical_transform(t_count_vector)  # 10 * 6 = 60
 
-        pt_vector = np.concatenate([p_vector, t_vector])  # 20 + 36 = 56
+        pt_vector = np.concatenate([p_vector, t_vector])  # 32 + 60 = 92
 
         publics = state[2]
         hands = [i for i in hands if i != -1]
@@ -496,7 +487,7 @@ class ACNet:
         card_array = self.np_numerical_transform(card.deuces2features(hands + publics))  # 14x4x6 = 312
         state_vector = np.concatenate([card_array, public_array, hand_array, pt_vector])
 
-        return state_vector, state_array, len(publics)  ## (312*3 + 56 = 992), (n_opposite x 81), turn_number
+        return state_vector, state_array, len(publics)  ## (312*3 + 92 = 1028), (n_opposite x 93), turn_number
 
     def state2feature(self, state, playerseat):
 

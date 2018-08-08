@@ -40,9 +40,9 @@ class A3CAgent:
         pathlib.Path(self.log_dir).mkdir(parents=True, exist_ok=True)
         pathlib.Path(self.model_dir).mkdir(parents=True, exist_ok=True)
 
-        self.lr_a_dis = 3e-4
+        self.lr_a_dis = 1e-5
         self.lr_a_con = 1e-5
-        self.lr_c = 3e-4
+        self.lr_c = 1e-5
 
         self.update_iter = update_iter
         self.dump_global_iter = dump_global_iter
@@ -61,6 +61,7 @@ class A3CAgent:
                                 training=learning)
 
         self.global_running_r = list()
+        self.global_running_round_r = list()
         self.global_ep = 0
 
         self.web_shift = 0
@@ -245,12 +246,10 @@ if __name__ == '__main__':
     from agent import allCallModel
     from agent import randomAgent
     import sys
-
-
-    # print(list(zip(agent.global_net.params, agent.sess.run(agent.global_net.params))))
     sys.path.append('../../')
     from agent.MonteCarlo.agent import NpRandom
-
+    model_dir = 'C:/Users/shanger_lin/Desktop/models/A3CAgent/model100'
+    # agent = A3CAgent(model_dir=model_dir, learning=True, hiring=True, n_workers=16, dump_global_iter=100, update_iter=10)
     # simple_o_list = ([allCallModel()] * 10) + ([allRaiseModel()] * 2) + ([allinModel()] * 2) #+ ([allFoldModel()] * 1) + ([allinModel()] * 2)
     #
     # o_list = [NpRandom(None, 'omggyy', timeout=0.25, cores=1),
@@ -264,31 +263,44 @@ if __name__ == '__main__':
     #           NpRandom(None, 'omggyy9', timeout=0.5, cores=1),
     #           NpRandom(None, 'omggyyT', timeout=0.25, cores=1),
     #           ] + simple_o_list
-
-    uris = ['ws://poker-battle.vtr.trendnet.org:3001'] + \
-           ['ws://poker-training.vtr.trendnet.org:3001/'] * len(range(1, 19)) * 3
-
-    names = ['1886368b064b4b76be10d54d38958ce3'] +\
-            ['omg{}'.format(str(i)) for i in range(1, 19)] + \
-            ['omgt{}'.format(str(i)) for i in range(1, 19)] + \
-            ['omgg{}'.format(str(i)) for i in range(1, 19)]
-
-    assert len(uris) == len(names)
-    model_dir = 'C:/Users/shanger_lin/Desktop/models/A3CAgent/model91'
-    agent = A3CAgent(model_dir=model_dir, learning=True, hiring=True, n_workers=len(names), dump_global_iter=100, update_iter=10)
-
     # agent.single_train(opposite_agents=simple_o_list,
-    #                    max_global_ep=1000,
+    #                    max_global_ep=1500,
     #                    dump_global_iter=300,
+    #                    update_iter=1,
+    #                    web=False,
+    #                    oppositenum=5)
+    # agent.single_train(opposite_agents=simple_o_list,
+    #                    max_global_ep=1500,
+    #                    dump_global_iter=300,
+    #                    update_iter=3,
+    #                    web=False,
+    #                    oppositenum=5)
+    # agent.single_train(opposite_agents=simple_o_list,
+    #                    max_global_ep=10000,
+    #                    dump_global_iter=1000,
     #                    update_iter=10,
     #                    web=False,
     #                    oppositenum=5)
     # agent.single_train(opposite_agents=o_list,
-    #                    max_global_ep=8000,
+    #                    max_global_ep=10000,
     #                    dump_global_iter=300,
-    #                    update_iter=10,
+    #                    update_iter=5,
     #                    web=False,
     #                    oppositenum=5)
+
+
+    uris = ['ws://poker-battle.vtr.trendnet.org:3001'] + \
+           ['ws://poker-training.vtr.trendnet.org:3001/'] * len(range(1, 19)) * 2
+
+    names = ['x'] +\
+            ['xx{}'.format(str(i)) for i in range(1, 19)] + \
+            ['xxx{}'.format(str(i)) for i in range(1, 19)]
+
+    assert len(uris) == len(names)
+    agent = A3CAgent(model_dir=model_dir, learning=True, hiring=True, n_workers=len(names), dump_global_iter=100,
+                     update_iter=10)
+
+
     agent.single_train(opposite_agents=list(),
                        max_global_ep=20000000000,
                        dump_global_iter=int(2*len(names)),

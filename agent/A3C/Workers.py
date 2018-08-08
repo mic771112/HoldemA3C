@@ -40,21 +40,23 @@ class Worker:
                 print('{}\t{}: I am ready, sir! but let me prepare {}sec more...'.format(self.name, name, game_sleep))
                 time.sleep(game_sleep)
 
-            # name = 'omg' + str((int(str(self.name)[-1])+self.mother.web_shift) % 16)
+            last_game = datetime.datetime.now()
             try:
                 print('{}\tconnect to {} as {}'.format(self.name, uri, name))
                 client_player = holdem.ClientPlayer(uri, name, self.AC, debug=False, playing_live=False)
                 client_player.doListen()
 
-                if ('battle' in uri) and ((datetime.datetime.now()-last_game).total_seconds()<10):
+                if ('battle' in uri) and ((datetime.datetime.now()-last_game).total_seconds()<=5):
                     sec = 100
+                    self.AC.pull_global()
+                    print(self.name, 'pulled')
                     print('{}\t{} is sleeping for {} secs at {}....'.format(self.name, name, sec, uri))
                     time.sleep(sec)
-                    last_game = datetime.datetime.now()
                     continue
 
                 local_game_count += 1
-            except:
+            except Exception as e:
+                print(['Error'], e)
                 local_game_count -= 1
                 if 'battle' not in uri:
                     sec = 10
@@ -219,7 +221,7 @@ class Worker:
         self.seats = oppositenum + 1
         self.myseat = np.random.randint(self.seats)
         self.model_list.insert(self.myseat, self.AC)
-        self.env = gym.make('TexasHoldem-v2')  # holdem.TexasHoldemEnv(self.seats)
+        self.env = gym.make('TexasHoldem-v2')  # holdem.TexasHoldemEnv(self.seats) #
         self.learnable_agent = self._get_learnable_agent(self.model_list)
 
         # gym.make('TexasHoldem-v2') # holdem.TexasHoldemEnv(self.seats)  #  holdem.TexasHoldemEnv(2)

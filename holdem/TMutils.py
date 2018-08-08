@@ -324,10 +324,10 @@ class ClientPlayer():
             return False
 
         elif msg == "_join":
-
-            print("---------------------------------")
-            print("[DEBUG]                      JOIN")
-            print("---------------------------------")
+            if self._debug:
+                print("---------------------------------")
+                print("[DEBUG]                      JOIN")
+                print("---------------------------------")
 
             self._player_dict = {}
             self._update_table_info(data["table"])
@@ -342,10 +342,10 @@ class ClientPlayer():
             return False
 
         elif msg == "__new_round":
-
-            print("---------------------------------")
-            print("[DEBUG]                 NEW ROUND")
-            print("---------------------------------")
+            if self._debug:
+                print("---------------------------------")
+                print("[DEBUG]                 NEW ROUND")
+                print("---------------------------------")
 
             # No action, update state
             self._tocall = 0 # not needed?
