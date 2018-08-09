@@ -292,9 +292,9 @@ if __name__ == '__main__':
     uris = ['ws://poker-battle.vtr.trendnet.org:3001'] + \
            ['ws://poker-training.vtr.trendnet.org:3001/'] * len(range(1, 19)) * 2
 
-    names = ['1886368b064b4b76be10d54d38958ce3'] +\
-            ['omg{}'.format(str(i)) for i in range(1, 19)] + \
-            ['omgt{}'.format(str(i)) for i in range(1, 19)]
+    names = ['x'] +\
+            ['xx{}'.format(str(i)) for i in range(1, 19)] + \
+            ['xxx{}'.format(str(i)) for i in range(1, 19)]
 
     assert len(uris) == len(names)
     agent = A3CAgent(model_dir=model_dir,
