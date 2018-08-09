@@ -2,6 +2,7 @@ import numpy as np
 import tensorflow as tf
 import itertools
 import collections
+import datetime
 
 from holdem import PLAYER_STATE, COMMUNITY_STATE, STATE, ACTION, action_table, card_to_normal_str
 import card
@@ -20,7 +21,7 @@ class ACNet:
         # self.state_size = 259
         self.dis_action_space = 2
         self.con_action_space = 1
-        self.con_action_bound = [10, 30000]
+        self.con_action_bound = [20, 30000]
 
         self.game_round = 0
         self.game_count = 0
@@ -28,7 +29,7 @@ class ACNet:
 
         self.con_weight = 1
         self.gamma = 0.8
-        self.con_entropy_beta = 3e-2
+        self.con_entropy_beta = 3e-1
         self.dis_entropy_beta = 1e1
         self.training = training
         self.globalmodel = globalmodel
@@ -315,8 +316,9 @@ class ACNet:
                 self.init_learning_buffer()
             if not global_ep % self.mother.dump_global_iter:
                 if self.training:
-                    self.mother.dump_sess()
-                    print('ckpt dumped')
+                    if int(datetime.datetime.now().time().hour) not in [12, 13, 14, 17, 18, 19, 20]:
+                        self.mother.dump_sess()
+                        print('ckpt dumped')
             print('self.mother.global_ep', self.mother.global_ep)
             print('global_ep', global_ep, '/', self.mother.dump_global_iter)
         except Exception as e:
