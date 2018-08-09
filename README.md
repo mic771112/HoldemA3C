@@ -1,3 +1,8 @@
+This is a A3C agent and MonteCarlo agent implimentation based on the env from: https://github.com/chuchuhao/holdem
+
+
+Below is the original env README:
+
 # TrendMicro CoreTech Allhands Holdem Competetion Training Tool 
 
 ## known issue
